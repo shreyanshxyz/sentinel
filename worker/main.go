@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
@@ -18,71 +20,105 @@ type LogPayload struct {
 	Message string `json:"message"`
 }
 
+type OllamaRequest struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+}
+
+type OllamaResponse struct {
+	Response string `json:"response"`
+}
+
+func analyzeWithAI(message string) string {
+	reqBody := OllamaRequest{
+		Model:  "qwen2.5:3b",
+		Prompt: fmt.Sprintf("Analyze this error and suggest a fix:\n\n%s", message),
+	}
+
+	data, _ := json.Marshal(reqBody)
+
+	resp, err := http.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return "AI service unavailable"
+	}
+	defer resp.Body.Close()
+
+	var result OllamaResponse
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	return result.Response
+}
+
 func main() {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
 
 	db, err := sql.Open(
-	"postgres",
-	"postgres://postgres:123123@localhost:5432/sentinel?sslmode=disable",
+		"postgres",
+		"host=localhost port=5432 user=postgres password=postgres dbname=sentinel sslmode=disable",
 	)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("Worker started. Waiting for logs...")
+	group := "sentinel-group"
+	consumer := "worker-1"
 
-group := "sentinel-group"
-consumer := "worker-1"
+	for {
+		streams, err := rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    group,
+			Consumer: consumer,
+			Streams:  []string{"logs", ">"},
+			Count:    1,
+			Block:    0,
+		}).Result()
 
-fmt.Println("Worker started with consumer group. Waiting for logs...")
+		if err != nil {
+			fmt.Println("Redis error:", err)
+			continue
+		}
 
-for {
-	streams, err := rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
-		Group:    group,
-		Consumer: consumer,
-		Streams:  []string{"logs", ">"},
-		Count:    1,
-		Block:    0,
-	}).Result()
+		for _, stream := range streams {
+			for _, msg := range stream.Messages {
+				raw := msg.Values["data"].(string)
 
-	if err != nil {
-		fmt.Println("Redis error:", err)
-		continue
-	}
+				var payload LogPayload
+				err := json.Unmarshal([]byte(raw), &payload)
+				if err != nil {
+					fmt.Println("Bad JSON:", err)
+					continue
+				}
 
-	for _, stream := range streams {
-		for _, msg := range stream.Messages {
-			raw := msg.Values["data"].(string)
+				fmt.Println("Processed:", payload)
 
-			var payload LogPayload
-			err := json.Unmarshal([]byte(raw), &payload)
-			if err != nil {
-				fmt.Println("Bad JSON:", err)
-				continue
-			}
+				var logID int
+				err = db.QueryRow(
+					"INSERT INTO logs(service, level, message) VALUES ($1,$2,$3) RETURNING id",
+					payload.Service,
+					payload.Level,
+					payload.Message,
+				).Scan(&logID)
 
-			fmt.Println("Processed:", payload)
+				if err != nil {
+					fmt.Println("DB error:", err)
+					continue
+				}
 
-			_, err = db.Exec(
-				"INSERT INTO logs(service, level, message) VALUES ($1,$2,$3)",
-				payload.Service,
-				payload.Level,
-				payload.Message,
-			)
+				aiSummary := analyzeWithAI(payload.Message)
 
-			if err != nil {
-				fmt.Println("DB error:", err)
-				continue
-			}
+				_, err = db.Exec(
+					"INSERT INTO log_insights(log_id, summary) VALUES ($1,$2)",
+					logID,
+					aiSummary,
+				)
 
-			err = rdb.XAck(ctx, "logs", group, msg.ID).Err()
-			if err != nil {
-				fmt.Println("ACK error:", err)
+				if err != nil {
+					fmt.Println("AI DB error:", err)
+				}
+
+				rdb.XAck(ctx, "logs", group, msg.ID)
 			}
 		}
 	}
-}
-
 }
