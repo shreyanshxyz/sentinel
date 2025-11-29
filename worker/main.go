@@ -31,22 +31,42 @@ type OllamaResponse struct {
 
 func analyzeWithAI(message string) string {
 	reqBody := OllamaRequest{
-		Model:  "qwen2.5:3b",
-		Prompt: fmt.Sprintf("Analyze this error and suggest a fix:\n\n%s", message),
+		Model: "qwen2.5:3b",
+		Prompt: fmt.Sprintf(
+			"Explain this error in 2 lines max and give 1 practical fix:\n\n%s",
+			message,
+		),
 	}
 
 	data, _ := json.Marshal(reqBody)
 
-	resp, err := http.Post("http://localhost:11434/api/generate", "application/json", bytes.NewBuffer(data))
+	resp, err := http.Post(
+		"http://localhost:11434/api/generate",
+		"application/json",
+		bytes.NewBuffer(data),
+	)
 	if err != nil {
 		return "AI service unavailable"
 	}
 	defer resp.Body.Close()
 
-	var result OllamaResponse
-	json.NewDecoder(resp.Body).Decode(&result)
+	decoder := json.NewDecoder(resp.Body)
 
-	return result.Response
+	var fullResponse string
+
+	for decoder.More() {
+		var chunk OllamaResponse
+		if err := decoder.Decode(&chunk); err != nil {
+			break
+		}
+		fullResponse += chunk.Response
+	}
+
+	if fullResponse == "" {
+		return "AI returned empty response"
+	}
+
+	return fullResponse
 }
 
 func main() {
