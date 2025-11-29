@@ -33,41 +33,56 @@ func main() {
 
 	fmt.Println("Worker started. Waiting for logs...")
 
-	for {
-		streams, err := rdb.XRead(ctx, &redis.XReadArgs{
-			Streams: []string{"logs", "$"},
-			Count:   1,
-			Block:   0,
-		}).Result()
+group := "sentinel-group"
+consumer := "worker-1"
 
-		if err != nil {
-			panic(err)
-		}
+fmt.Println("Worker started with consumer group. Waiting for logs...")
 
-		for _, stream := range streams {
-			for _, msg := range stream.Messages {
-				raw := msg.Values["data"].(string)
+for {
+	streams, err := rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group:    group,
+		Consumer: consumer,
+		Streams:  []string{"logs", ">"},
+		Count:    1,
+		Block:    0,
+	}).Result()
 
-				var payload LogPayload
-				err := json.Unmarshal([]byte(raw), &payload)
-				if err != nil {
-					fmt.Println("Bad JSON:", err)
-					continue
-				}
+	if err != nil {
+		fmt.Println("Redis error:", err)
+		continue
+	}
 
-				fmt.Println("➡️ Processed:", payload)
+	for _, stream := range streams {
+		for _, msg := range stream.Messages {
+			raw := msg.Values["data"].(string)
 
-				_, err = db.Exec(
-					"INSERT INTO logs(service, level, message) VALUES ($1,$2,$3)",
-					payload.Service,
-					payload.Level,
-					payload.Message,
-				)
+			var payload LogPayload
+			err := json.Unmarshal([]byte(raw), &payload)
+			if err != nil {
+				fmt.Println("Bad JSON:", err)
+				continue
+			}
 
-				if err != nil {
-					fmt.Println("DB error:", err)
-				}
+			fmt.Println("Processed:", payload)
+
+			_, err = db.Exec(
+				"INSERT INTO logs(service, level, message) VALUES ($1,$2,$3)",
+				payload.Service,
+				payload.Level,
+				payload.Message,
+			)
+
+			if err != nil {
+				fmt.Println("DB error:", err)
+				continue
+			}
+
+			err = rdb.XAck(ctx, "logs", group, msg.ID).Err()
+			if err != nil {
+				fmt.Println("ACK error:", err)
 			}
 		}
 	}
+}
+
 }
