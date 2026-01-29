@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { LogEntry } from "@/types/log";
 import { Badge } from "../../ui/Badge";
 import { Button } from "../../ui/Button";
@@ -15,6 +16,7 @@ export interface LogFeedProps {
   onPauseChange?: (paused: boolean) => void;
   onClear?: () => void;
   isPaused?: boolean;
+  navigateOnClick?: boolean;
 }
 
 export const LogFeed: React.FC<LogFeedProps> = ({
@@ -25,6 +27,7 @@ export const LogFeed: React.FC<LogFeedProps> = ({
   onPauseChange,
   onClear,
   isPaused: controlledIsPaused,
+  navigateOnClick = false,
 }) => {
   const [internalPaused, setInternalPaused] = useState(false);
   const [hoveredLog, setHoveredLog] = useState<string | null>(null);
@@ -55,7 +58,7 @@ export const LogFeed: React.FC<LogFeedProps> = ({
   };
 
   const getLogLevelColor = (level: string) => {
-    const colors = {
+    const colors: Record<string, string> = {
       DEBUG: "text-log-debug",
       INFO: "text-log-info",
       WARN: "text-log-warn",
@@ -128,61 +131,73 @@ export const LogFeed: React.FC<LogFeedProps> = ({
           </div>
         ) : (
           <div>
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className={cn(
-                  "flex items-start gap-2 py-0.5 px-3 transition-colors cursor-pointer border-l-2 border-transparent",
-                  "hover:bg-terminal-input hover:border-terminal-accent",
-                  hoveredLog === log.id &&
-                    "bg-terminal-input border-terminal-accent",
-                )}
-                onClick={() => onLogClick?.(log)}
-                onMouseEnter={() => setHoveredLog(log.id)}
-                onMouseLeave={() => setHoveredLog(null)}
-              >
-                <span className="text-terminal-muted font-mono text-[11px] whitespace-nowrap select-none shrink-0 w-18.75">
-                  {formatTimestamp(log.timestamp)}
-                </span>
-
-                <Badge
-                  variant="log-level"
-                  level={log.level}
-                  size="sm"
-                  className="shrink-0 w-11.25 justify-center"
-                >
-                  {log.level.slice(0, 4)}
-                </Badge>
-
-                <span className="text-log-info font-mono text-[11px] whitespace-nowrap shrink-0 opacity-80">
-                  {log.source}
-                </span>
-
-                <span
+            {logs.map((log) => {
+              const logContent = (
+                <div
+                  key={log.id}
                   className={cn(
-                    "flex-1 break-all text-xs leading-relaxed",
-                    getLogLevelColor(log.level),
+                    "flex items-start gap-2 py-0.5 px-3 transition-colors border-l-2 border-transparent",
+                    "hover:bg-terminal-input hover:border-terminal-accent",
+                    hoveredLog === log.id &&
+                      "bg-terminal-input border-terminal-accent",
                   )}
+                  onMouseEnter={() => setHoveredLog(log.id)}
+                  onMouseLeave={() => setHoveredLog(null)}
+                  onClick={() => onLogClick?.(log)}
                 >
-                  {log.message}
-                </span>
+                  <span className="text-terminal-muted font-mono text-[11px] whitespace-nowrap select-none shrink-0 w-18.75">
+                    {formatTimestamp(log.timestamp)}
+                  </span>
 
-                {Object.keys(log.labels).length > 0 && (
-                  <div className="flex gap-1 shrink-0">
-                    {Object.entries(log.labels)
-                      .slice(0, 2)
-                      .map(([key, value]) => (
-                        <span
-                          key={key}
-                          className="text-[9px] text-terminal-muted bg-terminal-border/30 px-1.5 py-0.5 font-mono"
-                        >
-                          {key}={String(value)}
-                        </span>
-                      ))}
-                  </div>
-                )}
-              </div>
-            ))}
+                  <Badge
+                    variant="log-level"
+                    level={log.level}
+                    size="sm"
+                    className="shrink-0 w-11.25 justify-center"
+                  >
+                    {log.level.slice(0, 4)}
+                  </Badge>
+
+                  <span className="text-log-info font-mono text-[11px] whitespace-nowrap shrink-0 opacity-80">
+                    {log.source}
+                  </span>
+
+                  <span
+                    className={cn(
+                      "flex-1 break-all text-xs leading-relaxed",
+                      getLogLevelColor(log.level),
+                    )}
+                  >
+                    {log.message}
+                  </span>
+
+                  {Object.keys(log.labels).length > 0 && (
+                    <div className="flex gap-1 shrink-0">
+                      {Object.entries(log.labels)
+                        .slice(0, 2)
+                        .map(([key, value]) => (
+                          <span
+                            key={key}
+                            className="text-[9px] text-terminal-muted bg-terminal-border/30 px-1.5 py-0.5 font-mono"
+                          >
+                            {key}={String(value)}
+                          </span>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              );
+
+              if (navigateOnClick) {
+                return (
+                  <Link key={log.id} href={`/logs/${log.id}`}>
+                    {logContent}
+                  </Link>
+                );
+              }
+
+              return logContent;
+            })}
             <div ref={endOfLogsRef} />
           </div>
         )}
