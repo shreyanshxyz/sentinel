@@ -42,16 +42,6 @@ export const AIInsightCard: React.FC<AIInsightCardProps> = ({
     return colors[priority] || "text-terminal-muted";
   };
 
-  const getTypeIcon = (type: string) => {
-    const icons: Record<string, string> = {
-      investigation: "🔍",
-      fix: "🔧",
-      monitor: "📊",
-      documentation: "📝",
-    };
-    return icons[type] || "•";
-  };
-
   const getTypeColor = (type: string) => {
     const colors: Record<string, string> = {
       investigation: "text-log-info",
@@ -164,9 +154,7 @@ export const AIInsightCard: React.FC<AIInsightCardProps> = ({
                         "text-lg mt-0.5 shrink-0",
                         getTypeColor(action.type),
                       )}
-                    >
-                      {getTypeIcon(action.type)}
-                    </span>
+                    ></span>
 
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
