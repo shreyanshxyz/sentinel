@@ -101,6 +101,7 @@ export default function Home() {
             isPaused={isPaused}
             onPauseChange={setIsPaused}
             onClear={handleClearLogs}
+            navigateOnClick={true}
           />
         </div>
       </div>
