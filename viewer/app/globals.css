@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+:root {
+  --terminal-bg: #0a0a0a;
+  --terminal-fg: #00ff00;
+  --terminal-cursor: #00ff00;
+  --log-debug: #6b7280;
+  --log-info: #06b6d4;
+  --log-warn: #f59e0b;
+  --log-error: #ef4444;
+  --log-fatal: #dc2626;
+  --terminal-border: #1f2937;
+  --terminal-input: #111827;
+  --terminal-accent: #10b981;
+  --terminal-muted: #4b5563;
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --text-primary: #e5e7eb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+}
+
+@theme inline {
+  --color-terminal-bg: var(--terminal-bg);
+  --color-terminal-fg: var(--terminal-fg);
+  --color-log-debug: var(--log-debug);
+  --color-log-info: var(--log-info);
+  --color-log-warn: var(--log-warn);
+  --color-log-error: var(--log-error);
+  --color-log-fatal: var(--log-fatal);
+  --color-terminal-border: var(--terminal-border);
+  --color-terminal-input: var(--terminal-input);
+  --color-terminal-accent: var(--terminal-accent);
+  --color-terminal-muted: var(--terminal-muted);
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+  --font-terminal: "JetBrains Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-terminal);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--terminal-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--terminal-muted);
+}
+
+::selection {
+  background: var(--terminal-accent);
+  color: var(--bg-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--terminal-accent);
+  outline-offset: 2px;
+}
+
+@keyframes terminal-cursor {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.terminal-cursor {
+  animation: terminal-cursor 1s infinite;
+}
+
+@keyframes typing {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.typing-animation {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: typing 2s steps(40, end);
+}
