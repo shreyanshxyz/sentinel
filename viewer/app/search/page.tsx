@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Header } from "../../components/layout/Header";
 import { Navigation } from "../../components/layout/Navigation";
 import { Input } from "../../components/ui/Input";
@@ -28,6 +29,7 @@ interface SearchFilters {
 }
 
 export default function SearchPage() {
+  const router = useRouter();
   const [filters, setFilters] = useState<SearchFilters>({
     query: "",
     service: "",
@@ -134,7 +136,7 @@ export default function SearchPage() {
   };
 
   const handleLogClick = (log: LogEntry) => {
-    console.log("Log clicked:", log.id);
+    router.push(`/logs/${log.id}`);
   };
 
   return (

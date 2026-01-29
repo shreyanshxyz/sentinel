@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { LogEntry } from "@/types/log";
 import { Badge } from "../../ui/Badge";
 import { cn } from "../../../lib/utils";
@@ -17,6 +18,7 @@ export interface LogItemProps {
   showSource?: boolean;
   showLabels?: boolean;
   compact?: boolean;
+  navigateOnClick?: boolean;
 }
 
 export const LogItem: React.FC<LogItemProps> = ({
@@ -31,6 +33,7 @@ export const LogItem: React.FC<LogItemProps> = ({
   showSource = true,
   showLabels = true,
   compact = false,
+  navigateOnClick = false,
 }) => {
   const formatTimestamp = (timestamp: string) => {
     return new Date(timestamp).toLocaleTimeString("en-US", {
@@ -43,7 +46,7 @@ export const LogItem: React.FC<LogItemProps> = ({
   };
 
   const getLogLevelColor = (level: string) => {
-    const colors = {
+    const colors: Record<string, string> = {
       DEBUG: "text-log-debug",
       INFO: "text-log-info",
       WARN: "text-log-warn",
@@ -53,18 +56,18 @@ export const LogItem: React.FC<LogItemProps> = ({
     return colors[level as keyof typeof colors] || "text-text-primary";
   };
 
-  return (
+  const content = (
     <div
       className={cn(
-        "flex items-start gap-2 py-0.5 px-3 transition-colors cursor-pointer border-l-2 border-transparent",
+        "flex items-start gap-2 py-0.5 px-3 transition-colors border-l-2 border-transparent",
         "hover:bg-terminal-input hover:border-terminal-accent",
         isHovered && "bg-terminal-input border-terminal-accent",
         compact && "py-0.5 px-2",
         className,
       )}
-      onClick={() => onClick?.(log)}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onClick={() => onClick?.(log)}
     >
       {showTimestamp && (
         <span
@@ -128,6 +131,12 @@ export const LogItem: React.FC<LogItemProps> = ({
       )}
     </div>
   );
+
+  if (navigateOnClick) {
+    return <Link href={`/logs/${log.id}`}>{content}</Link>;
+  }
+
+  return content;
 };
 
 export default LogItem;
