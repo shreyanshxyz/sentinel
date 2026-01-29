@@ -57,8 +57,7 @@ const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
           INFO: "bg-log-info/10 text-log-info border border-log-info/40",
           WARN: "bg-log-warn/10 text-log-warn border border-log-warn/40",
           ERROR: "bg-log-error/10 text-log-error border border-log-error/40",
-          FATAL:
-            "bg-log-fatal/20 text-log-fatal border border-log-fatal/50 animate-pulse",
+          FATAL: "bg-log-fatal/20 text-log-fatal border border-log-fatal/50",
         }[level]
       : "";
 

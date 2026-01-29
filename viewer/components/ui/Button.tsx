@@ -32,7 +32,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       primary:
-        "bg-terminal-input text-terminal-fg border border-terminal-border hover:border-terminal-accent hover:bg-terminal-border hover:shadow-[0_0_10px_rgba(16,185,129,0.3)]",
+        "bg-terminal-input text-terminal-fg border border-terminal-border hover:border-terminal-accent hover:bg-terminal-border",
       secondary:
         "bg-transparent text-text-secondary border border-terminal-border hover:text-text-primary hover:border-terminal-muted hover:bg-terminal-input",
       outline:
@@ -40,11 +40,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       ghost:
         "bg-transparent text-text-muted hover:text-terminal-fg hover:bg-terminal-input",
       terminal:
-        "bg-terminal-bg text-terminal-fg border border-terminal-fg hover:bg-terminal-fg hover:text-terminal-bg hover:shadow-[0_0_15px_rgba(0,255,0,0.4)]",
+        "bg-terminal-bg text-terminal-fg border border-terminal-fg hover:bg-terminal-fg hover:text-terminal-bg",
       danger:
-        "bg-terminal-input text-log-error border border-log-error/50 hover:bg-log-error hover:text-terminal-bg hover:shadow-[0_0_10px_rgba(239,68,68,0.4)]",
+        "bg-terminal-input text-log-error border border-log-error hover:bg-log-error hover:text-terminal-bg",
       success:
-        "bg-terminal-input text-log-info border border-log-info/50 hover:bg-log-info hover:text-terminal-bg hover:shadow-[0_0_10px_rgba(6,182,212,0.4)]",
+        "bg-terminal-input text-log-info border border-log-info hover:bg-log-info hover:text-terminal-bg",
     };
 
     const sizes = {
