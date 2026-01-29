@@ -7,7 +7,7 @@ export interface LogEntry {
   message: string;
   source: string;
   labels: Record<string, string>;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, number>;
   raw?: string;
 }
 
