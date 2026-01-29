@@ -33,6 +33,27 @@ export interface LogAnalysis {
   createdAt: string;
 }
 
+export interface AIInsight {
+  id: string;
+  logId: string;
+  summary: string;
+  rootCause: string;
+  followUps: FollowUpAction[];
+  severity: "low" | "medium" | "high" | "critical";
+  confidence: number;
+  patterns: string[];
+  relatedLogs: string[];
+  createdAt: string;
+}
+
+export interface FollowUpAction {
+  id: string;
+  title: string;
+  description: string;
+  priority: "low" | "medium" | "high" | "critical";
+  type: "investigation" | "fix" | "monitor" | "documentation";
+}
+
 export interface LogSource {
   id: string;
   name: string;
