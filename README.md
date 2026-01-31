@@ -272,16 +272,6 @@ The worker employs multiple detection strategies:
 | Styling     | Tailwind CSS 4                       |
 | UI          | Custom components                    |
 
-## Roadmap
-
-- [ ] Persistent storage (PostgreSQL/TimescaleDB)
-- [ ] Log aggregation from files/syslog
-- [ ] Custom alert rules and notifications
-- [ ] Multi-model LLM support (OpenAI, Anthropic)
-- [ ] Log correlation across services
-- [ ] Performance metrics dashboard
-- [ ] RBAC and authentication
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
