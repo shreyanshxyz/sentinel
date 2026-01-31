@@ -56,3 +56,34 @@ export const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   ERROR: 3,
   FATAL: 4,
 };
+
+export type Severity = "low" | "medium" | "high" | "critical";
+
+export type FollowUpType =
+  | "investigation"
+  | "fix"
+  | "monitor"
+  | "documentation";
+
+export interface FollowUpAction {
+  id: string;
+  title: string;
+  description: string;
+  priority: Severity;
+  type: FollowUpType;
+}
+
+export interface AIAnalysis {
+  id: string;
+  logId: string;
+  summary: string;
+  rootCause: string;
+  severity: Severity;
+  confidence: number;
+  patterns: string[];
+  relatedLogs: string[];
+  followUps: FollowUpAction[];
+  anomalyScore: number;
+  createdAt: string;
+  modelVersion: string;
+}
