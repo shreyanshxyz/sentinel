@@ -275,7 +275,3 @@ The worker employs multiple detection strategies:
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-Built for production observability. No fluff, just logs.
