@@ -20,6 +20,7 @@ export interface ResponseMeta {
   hasNext?: boolean;
   hasPrev?: boolean;
   totalPages?: number;
+  message?: string;
 }
 
 export interface PaginatedResponse<T> extends ApiResponse<T[]> {
