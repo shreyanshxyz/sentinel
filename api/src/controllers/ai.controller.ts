@@ -170,15 +170,17 @@ export const getPendingLogs = (
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
     const recentLogs = logService.getRecent(limit * 2);
+    const pendingAnalyses = aiService.getPendingAnalyses();
+    const pendingLogIds = aiService.getPendingAnalysisLogIds();
+
+    logger.info("getPendingLogs called", {
+      totalRecentLogs: recentLogs.length,
+      pendingAnalysesCount: pendingAnalyses.length,
+      pendingLogIds: pendingLogIds,
+    });
 
     const pendingLogs: LogEntry[] = [];
-    const pendingIds = new Set<string>();
-
-    for (const log of recentLogs) {
-      if (aiService.hasPendingAnalysis(log.id)) {
-        pendingIds.add(log.id);
-      }
-    }
+    const pendingIds = new Set<string>(pendingLogIds);
 
     const errorLogs = recentLogs.filter(
       (log) => pendingIds.has(log.id) && ["ERROR", "FATAL"].includes(log.level),
@@ -191,10 +193,14 @@ export const getPendingLogs = (
     pendingLogs.push(...errorLogs, ...otherLogs);
     const limitedLogs = pendingLogs.slice(0, limit);
 
-    logger.debug("Pending logs requested", {
+    logger.info("Pending logs response", {
+      totalRecentLogs: recentLogs.length,
+      pendingAnalysesCount: pendingAnalyses.length,
       totalPending: pendingLogs.length,
       returned: limitedLogs.length,
       errorCount: errorLogs.length,
+      otherCount: otherLogs.length,
+      returnedLogIds: limitedLogs.map(l => l.id),
     });
 
     const response: ApiResponse<LogEntry[]> = {
