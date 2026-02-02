@@ -117,3 +117,34 @@ export const streamLogs = (
 ): void => {
   streamService.addClient(res);
 };
+
+export const getSources = (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  try {
+    const sources = logService.getSources();
+    const response: ApiResponse<{
+      id: string;
+      name: string;
+      type: string;
+      status: string;
+      config: Record<string, string>;
+      lastSeen: string;
+    }[]> = {
+      success: true,
+      data: sources.map((name) => ({
+        id: name,
+        name,
+        type: "api",
+        status: "active",
+        config: {},
+        lastSeen: new Date().toISOString(),
+      })),
+    };
+    res.status(200).json(response);
+  } catch (err) {
+    next(err);
+  }
+};
