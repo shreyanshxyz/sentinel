@@ -220,7 +220,7 @@ export const LogFeed: React.FC<LogFeedProps> = ({
 
         <div className="text-terminal-muted font-mono text-xs">
           {logs.length > 0
-            ? `> ${formatTimestamp(logs[logs.length - 1].timestamp)}`
+            ? `> ${formatTimestamp(logs[logs.length - 1]!.timestamp)}`
             : "--:--:--.---"}
         </div>
       </div>

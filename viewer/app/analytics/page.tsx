@@ -307,31 +307,31 @@ export default function AnalyticsPage() {
             <div className="space-y-1">
               <LevelBar
                 level="DEBUG"
-                count={stats.byLevel.DEBUG}
+                count={stats.byLevel.DEBUG ?? 0}
                 total={stats.total}
                 color="bg-terminal-muted/50"
               />
               <LevelBar
                 level="INFO"
-                count={stats.byLevel.INFO}
+                count={stats.byLevel.INFO ?? 0}
                 total={stats.total}
                 color="bg-log-info/60"
               />
               <LevelBar
                 level="WARN"
-                count={stats.byLevel.WARN}
+                count={stats.byLevel.WARN ?? 0}
                 total={stats.total}
                 color="bg-log-warn/60"
               />
               <LevelBar
                 level="ERROR"
-                count={stats.byLevel.ERROR}
+                count={stats.byLevel.ERROR ?? 0}
                 total={stats.total}
                 color="bg-log-error/60"
               />
               <LevelBar
                 level="FATAL"
-                count={stats.byLevel.FATAL}
+                count={stats.byLevel.FATAL ?? 0}
                 total={stats.total}
                 color="bg-log-fatal/80"
               />
