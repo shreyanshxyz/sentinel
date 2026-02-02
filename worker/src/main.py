@@ -69,10 +69,10 @@ class AIWorker:
             logs = await self.analyzer.api.get_pending_logs(limit=config.batch_size)
 
             if not logs:
-                logger.debug("No pending logs to analyze")
+                logger.info(f"Job #{job_id}: No pending logs to analyze")
                 return
 
-            logger.info(f"Fetched {len(logs)} logs for analysis")
+            logger.info(f"Job #{job_id}: Fetched {len(logs)} logs for analysis", log_ids=[log.id for log in logs])
 
             results = await self.analyzer.analyze_batch(logs)
 
@@ -89,7 +89,7 @@ class AIWorker:
             logger.error(f"Analysis job #{job_id} failed", error=str(e))
             self.jobs_failed += 1
 
-    def start(self) -> None:
+    async def start(self) -> None:
         if not self.scheduler:
             logger.error("Worker not initialized")
             sys.exit(1)
@@ -116,7 +116,7 @@ class AIWorker:
 
         try:
             while self.running:
-                asyncio.sleep(1)
+                await asyncio.sleep(1)
         except (KeyboardInterrupt, SystemExit):
             self.stop()
 
@@ -159,7 +159,7 @@ async def main() -> int:
         logger.error("Failed to initialize worker")
         return 1
 
-    worker.start()
+    await worker.start()
 
     return 0
 
