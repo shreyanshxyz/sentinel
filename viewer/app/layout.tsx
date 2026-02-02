@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fira_Code } from "next/font/google";
 import "./globals.css";
 import { ReactNode } from "react";
+import { QueryProvider } from "@/providers/QueryProvider";
 
 const firaCode = Fira_Code({
   subsets: ["latin"],
@@ -23,7 +24,7 @@ export default function RootLayout({
       <body
         className={`${firaCode.className} antialiased min-h-screen bg-terminal-bg`}
       >
-        {children}
+        <QueryProvider>{children}</QueryProvider>
       </body>
     </html>
   );
