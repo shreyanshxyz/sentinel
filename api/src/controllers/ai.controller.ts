@@ -66,6 +66,7 @@ export const triggerAnalysis = (
       anomalyScore: 0,
       createdAt: new Date().toISOString(),
       modelVersion: "pending",
+      status: "pending",
     };
 
     aiService.saveAnalysis(pendingAnalysis);
@@ -137,6 +138,7 @@ export const storeAnalysis = (
       anomalyScore: analysisData.anomalyScore || 0,
       createdAt: analysisData.createdAt || new Date().toISOString(),
       modelVersion: analysisData.modelVersion || "unknown",
+      status: "completed",
     };
 
     const saved = aiService.saveAnalysis(analysis);
@@ -170,21 +172,20 @@ export const getPendingLogs = (
     const recentLogs = logService.getRecent(limit * 2);
 
     const pendingLogs: LogEntry[] = [];
-    const analyzedIds = new Set<string>();
+    const pendingIds = new Set<string>();
 
     for (const log of recentLogs) {
-      if (aiService.hasAnalysis(log.id)) {
-        analyzedIds.add(log.id);
+      if (aiService.hasPendingAnalysis(log.id)) {
+        pendingIds.add(log.id);
       }
     }
 
     const errorLogs = recentLogs.filter(
-      (log) =>
-        !analyzedIds.has(log.id) && ["ERROR", "FATAL"].includes(log.level),
+      (log) => pendingIds.has(log.id) && ["ERROR", "FATAL"].includes(log.level),
     );
     const otherLogs = recentLogs.filter(
       (log) =>
-        !analyzedIds.has(log.id) && !["ERROR", "FATAL"].includes(log.level),
+        pendingIds.has(log.id) && !["ERROR", "FATAL"].includes(log.level),
     );
 
     pendingLogs.push(...errorLogs, ...otherLogs);
