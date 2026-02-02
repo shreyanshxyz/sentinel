@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "../../components/layout/Header";
 import { Navigation } from "../../components/layout/Navigation";
@@ -11,9 +11,10 @@ import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Spinner } from "../../components/ui/Spinner";
 import { LogItem } from "../../components/features/LogItem/LogItem";
-import { LogEntry, LogLevel } from "@/types/log";
-import { generateMockLogEntries } from "../../lib/mock-data";
+import { LogEntry, LogLevel, LogFilter } from "@/types/log";
+import { useSearchLogs } from "@/hooks/useQueries";
 import { cn } from "../../lib/utils";
+import { APIError } from "@/lib/api";
 
 interface DateRange {
   start: string;
@@ -41,10 +42,7 @@ export default function SearchPage() {
     labels: {},
   });
 
-  const [results, setResults] = useState<LogEntry[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [totalResults, setTotalResults] = useState(0);
   const [hoveredLog, setHoveredLog] = useState<string | null>(null);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
 
@@ -55,69 +53,50 @@ export default function SearchPage() {
     { label: "Settings", href: "/settings" },
   ];
 
-  const serviceOptions = [
-    { value: "", label: "All Services" },
-    { value: "api-server", label: "api-server" },
-    { value: "database", label: "database" },
-    { value: "auth-service", label: "auth-service" },
-    { value: "payment-gateway", label: "payment-gateway" },
-    { value: "web-server", label: "web-server" },
-    { value: "cache", label: "cache" },
-    { value: "queue-worker", label: "queue-worker" },
-  ];
-
-  const levelOptions = [
-    { value: "", label: "All Levels" },
-    { value: "DEBUG", label: "DEBUG" },
-    { value: "INFO", label: "INFO" },
-    { value: "WARN", label: "WARN" },
-    { value: "ERROR", label: "ERROR" },
-    { value: "FATAL", label: "FATAL" },
-  ];
-
-  const handleSearch = async () => {
-    setIsSearching(true);
-    setHasSearched(true);
-
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    // Generate mock search results
-    const mockResults = generateMockLogEntries(25);
-
-    // Filter based on search criteria
-    let filtered = mockResults;
+  const buildLogFilter = useCallback((): LogFilter => {
+    const logFilter: LogFilter = {
+      limit: 100,
+      offset: 0,
+    };
 
     if (filters.query) {
-      const query = filters.query.toLowerCase();
-      filtered = filtered.filter(
-        (log) =>
-          log.message.toLowerCase().includes(query) ||
-          log.source.toLowerCase().includes(query),
-      );
+      logFilter.query = filters.query;
     }
 
     if (filters.service) {
-      filtered = filtered.filter((log) => log.source === filters.service);
+      logFilter.sources = [filters.service];
     }
 
     if (filters.level) {
-      filtered = filtered.filter((log) => log.level === filters.level);
+      logFilter.levels = [filters.level];
     }
 
     if (filters.dateRange.start) {
-      const startDate = new Date(filters.dateRange.start);
-      filtered = filtered.filter((log) => new Date(log.timestamp) >= startDate);
+      logFilter.startTime = new Date(filters.dateRange.start).toISOString();
     }
 
     if (filters.dateRange.end) {
-      const endDate = new Date(filters.dateRange.end);
-      filtered = filtered.filter((log) => new Date(log.timestamp) <= endDate);
+      logFilter.endTime = new Date(filters.dateRange.end).toISOString();
     }
 
-    setResults(filtered);
-    setTotalResults(filtered.length);
-    setIsSearching(false);
+    return logFilter;
+  }, [filters]);
+
+  const {
+    data: searchResponse,
+    isLoading: isSearching,
+    error: searchError,
+    refetch: executeSearch,
+  } = useSearchLogs(buildLogFilter(), hasSearched);
+
+  const results = searchResponse?.data || [];
+  const totalResults = searchResponse?.meta?.total || results.length;
+  const facets = searchResponse?.facets;
+
+  const handleSearch = async () => {
+    setHasSearched(true);
+    // Trigger the search
+    await executeSearch();
   };
 
   const handleClearFilters = () => {
@@ -131,13 +110,49 @@ export default function SearchPage() {
       },
       labels: {},
     });
-    setResults([]);
     setHasSearched(false);
   };
 
   const handleLogClick = (log: LogEntry) => {
     router.push(`/logs/${log.id}`);
   };
+
+  const availableSources = facets?.sources
+    ? Object.entries(facets.sources)
+        .sort(([, a], [, b]) => b - a)
+        .map(([name]) => name)
+    : [
+        "api-server",
+        "database",
+        "auth-service",
+        "payment-gateway",
+        "web-server",
+        "cache",
+        "queue-worker",
+      ];
+
+  const serviceOptions = [
+    { value: "", label: "All Services" },
+    ...availableSources.map((source) => ({
+      value: source,
+      label: source,
+    })),
+  ];
+
+  const levelOptions = [
+    { value: "", label: "All Levels" },
+    { value: "DEBUG", label: "DEBUG" },
+    { value: "INFO", label: "INFO" },
+    { value: "WARN", label: "WARN" },
+    { value: "ERROR", label: "ERROR" },
+    { value: "FATAL", label: "FATAL" },
+  ];
+
+  const errorMessage = searchError
+    ? searchError instanceof APIError
+      ? searchError.message
+      : "Search failed"
+    : null;
 
   return (
     <div className="h-screen flex flex-col bg-terminal-bg">
@@ -402,6 +417,15 @@ export default function SearchPage() {
                 )}
               </div>
             </div>
+
+            {errorMessage && (
+              <div className="p-4 border-b border-log-error bg-log-error/10">
+                <div className="flex items-center gap-2 text-log-error font-mono text-sm">
+                  <span>⚠</span>
+                  <span>{errorMessage}</span>
+                </div>
+              </div>
+            )}
 
             {/* Results List */}
             <div className="flex-1 overflow-y-auto font-mono text-sm bg-black">
