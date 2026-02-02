@@ -16,6 +16,12 @@ class Severity(str, Enum):
     CRITICAL = "critical"
 
 
+class AnalysisStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class FollowUpType(str, Enum):
     INVESTIGATION = "investigation"
     FIX = "fix"
@@ -114,6 +120,10 @@ class AIAnalysis(BaseModel):
         default="llama3.1:8b",
         description="LLM model version used for analysis",
     )
+    status: AnalysisStatus = Field(
+        default=AnalysisStatus.COMPLETED,
+        description="Analysis status: pending, completed, or failed",
+    )
     
     @field_validator("confidence", "anomaly_score")
     @classmethod
@@ -133,6 +143,7 @@ class AIAnalysis(BaseModel):
         follow_ups: list[FollowUpAction] | None = None,
         anomaly_score: float = 0.0,
         model_version: str = "llama3.1:8b",
+        status: AnalysisStatus = AnalysisStatus.COMPLETED,
     ) -> "AIAnalysis":
         return cls(
             id=f"analysis-{uuid4().hex[:12]}",
@@ -146,6 +157,7 @@ class AIAnalysis(BaseModel):
             follow_ups=follow_ups or [],
             anomaly_score=anomaly_score,
             model_version=model_version,
+            status=status,
         )
     
     @property
@@ -179,6 +191,7 @@ class AIAnalysis(BaseModel):
             "anomalyScore": self.anomaly_score,
             "createdAt": self.created_at,
             "modelVersion": self.model_version,
+            "status": self.status.value,
         }
     
     def __str__(self) -> str:
