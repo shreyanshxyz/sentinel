@@ -44,6 +44,7 @@ export interface AIInsight {
   patterns: string[];
   relatedLogs: string[];
   createdAt: string;
+  status: "pending" | "completed" | "failed";
 }
 
 export interface FollowUpAction {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "../ui/Button";
 import { Badge } from "../ui/Badge";
 import { Input } from "../ui/Input";
@@ -20,6 +20,7 @@ export interface SidebarProps {
   onFiltersChange?: (filters: Filters) => void;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  availableSources?: string[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -28,6 +29,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onFiltersChange,
   searchQuery = "",
   onSearchChange,
+  availableSources,
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [selectedLevels, setSelectedLevels] = useState<LogLevel[]>(
@@ -38,13 +40,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   );
 
   const logLevels: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR", "FATAL"];
-  const mockSources = [
+  const sources = availableSources || [
     "api-server",
     "database",
     "auth-service",
     "payment-gateway",
     "web-server",
   ];
+
+  useEffect(() => {
+    setSelectedLevels(filters.levels);
+    setSelectedSources(filters.sources);
+  }, [filters.levels, filters.sources]);
 
   const toggleLevel = (level: LogLevel) => {
     const newLevels = selectedLevels.includes(level)
@@ -153,7 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className="text-terminal-accent">]</span>
                 </h3>
                 <div className="space-y-1 border-l border-terminal-border/50 pl-3">
-                  {mockSources.map((source) => (
+                  {sources.map((source) => (
                     <Checkbox
                       key={source}
                       checked={selectedSources.includes(source)}
