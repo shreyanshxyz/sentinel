@@ -372,5 +372,6 @@ export function generateMockAIInsight(
         `log_${Date.now() - randomInt(1000, 100000)}_${randomInt(1000, 9999)}`,
     ),
     createdAt: new Date().toISOString(),
+    status: "completed",
   };
 }
