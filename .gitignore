@@ -54,3 +54,5 @@ Thumbs.db
 # Secrets
 secrets.json
 docs/
+
+node_modules/
