@@ -86,4 +86,5 @@ export interface AIAnalysis {
   anomalyScore: number;
   createdAt: string;
   modelVersion: string;
+  status: "pending" | "completed" | "failed";
 }

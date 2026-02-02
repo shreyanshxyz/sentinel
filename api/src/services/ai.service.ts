@@ -35,6 +35,19 @@ class AIService {
     return this.analyses.has(logId);
   }
 
+  hasPendingAnalysis(logId: string): boolean {
+    const analysis = this.analyses.get(logId);
+    return analysis?.status === "pending";
+  }
+
+  getPendingAnalyses(): AIAnalysis[] {
+    return this.getAllAnalyses().filter((a) => a.status === "pending");
+  }
+
+  getPendingAnalysisLogIds(): string[] {
+    return this.getPendingAnalyses().map((a) => a.logId);
+  }
+
   getAllAnalyses(): AIAnalysis[] {
     return Array.from(this.analyses.values());
   }
