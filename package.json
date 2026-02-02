@@ -1,0 +1,20 @@
+{
+  "name": "sentinel",
+  "version": "1.0.0",
+  "description": "Sentinel - Log aggregation and monitoring platform",
+  "private": true,
+  "workspaces": [
+    "api",
+    "viewer"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=api",
+    "dev:viewer": "npm run dev --workspace=viewer",
+    "build:api": "npm run build --workspace=api",
+    "build:viewer": "npm run build --workspace=viewer",
+    "install:all": "npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
