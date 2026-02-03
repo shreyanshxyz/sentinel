@@ -5,8 +5,8 @@ import {
   QueryKey,
 } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
-import { LogEntry, LogFilter, AIInsight, LogSource } from "@/types/log";
-import { HealthResponse, SearchResponse } from "@/types/api";
+import { LogFilter, AIInsight } from "@/types/log";
+import { useEffect, useRef, useState } from "react";
 
 export const queryKeys = {
   logs: ["logs"] as QueryKey,
@@ -76,6 +76,95 @@ export function useTriggerAnalysis() {
       queryClient.setQueryData(queryKeys.logAnalysis(logId), data);
     },
   });
+}
+
+export function useStreamingAnalysis(logId: string) {
+  const [streaming, setStreaming] = useState(false);
+  const [content, setContent] = useState("");
+  const [analysis, setAnalysis] = useState<AIInsight | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    if (!logId) return;
+
+    setStreaming(true);
+    setContent("");
+    setAnalysis(null);
+    setError(null);
+
+    const { eventSource, controller } = apiClient.streamAnalysis(logId);
+
+    eventSourceRef.current = eventSource;
+
+    eventSource.onopen = () => {
+      console.log("SSE connection opened");
+    };
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        switch (data.type) {
+          case "start":
+            console.log("Analysis started for log:", data.logId);
+            break;
+
+          case "chunk":
+            setContent((prev) => prev + data.content);
+            break;
+
+          case "analysis":
+            console.log("Analysis complete:", data.analysis);
+            setAnalysis(data.analysis);
+            setStreaming(false);
+            eventSource.close();
+            break;
+
+          case "error":
+            console.error("Analysis error:", data.error);
+            setError(data.error);
+            setStreaming(false);
+            eventSource.close();
+            break;
+
+          default:
+            console.warn("Unknown event type:", data.type);
+        }
+      } catch (err) {
+        console.error("Failed to parse SSE event:", err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error("SSE connection error:", err);
+      setError("Connection failed. Please try again.");
+      setStreaming(false);
+    };
+
+    eventSource.onclose = () => {
+      console.log("SSE connection closed");
+      setStreaming(false);
+    };
+
+    return () => {
+      eventSource.close();
+      controller.abort();
+      eventSourceRef.current = null;
+    };
+  }, [logId]);
+
+  return {
+    streaming,
+    content,
+    analysis,
+    error,
+    close: () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    },
+  };
 }
 
 export function useAnalytics(timeRange: string, enabled = true) {
