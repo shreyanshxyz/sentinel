@@ -68,6 +68,11 @@ class Config(BaseSettings):
         description="Directory for storing analysis data and logs",
     )
     
+    worker_http_port: int = Field(
+        default=8080,
+        description="Port for Worker HTTP API server (for immediate analysis triggers)",
+    )
+    
     log_level: str = Field(
         default="INFO",
         description="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
