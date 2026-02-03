@@ -190,6 +190,22 @@ class APIClient {
     return this.post<AIInsight>(`/logs/${logId}/analyze`);
   }
 
+  streamAnalysis(logId: string): {
+    eventSource: EventSource;
+    controller: AbortController;
+  } {
+    const eventSource = new EventSource(
+      `${API_BASE_URL}/logs/${logId}/analyze-stream`
+    );
+
+    const controller = new AbortController();
+
+    return {
+      eventSource,
+      controller,
+    };
+  }
+
   async getSources(): Promise<LogSource[]> {
     return this.get<LogSource[]>("/sources");
   }
