@@ -5,6 +5,8 @@ import { ApiResponse, ApiException } from "../types/api.types.js";
 import { AIAnalysis, LogEntry } from "../types/log.types.js";
 import { logger } from "../utils/logger.js";
 import { v4 as uuidv4 } from "uuid";
+import { createReadStream } from "fs";
+import { IncomingMessage, ServerResponse } from "http";
 
 export const getLogAnalysis = (
   req: Request,
@@ -200,7 +202,7 @@ export const getPendingLogs = (
       returned: limitedLogs.length,
       errorCount: errorLogs.length,
       otherCount: otherLogs.length,
-      returnedLogIds: limitedLogs.map(l => l.id),
+      returnedLogIds: limitedLogs.map((l) => l.id),
     });
 
     const response: ApiResponse<LogEntry[]> = {
@@ -253,5 +255,75 @@ export const getCriticalAnalyses = (
     res.status(200).json(response);
   } catch (err) {
     next(err);
+  }
+};
+
+export const streamAnalysis = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  const { id } = req.params;
+
+  const log = logService.getById(id);
+  if (!log) {
+    throw new ApiException("NOT_FOUND", `Log with id '${id}' not found`, 404);
+  }
+
+  logger.info(`Streaming analysis for log ${id}`);
+
+  try {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    const workerUrl = `http://localhost:8080/process-now`;
+
+    const workerRes = await fetch(workerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ logId: id }),
+    });
+
+    if (!workerRes.ok) {
+      throw new Error(
+        `Worker returned ${workerRes.status}: ${workerRes.statusText}`,
+      );
+    }
+
+    if (!workerRes.body) {
+      throw new Error("Worker response has no body");
+    }
+
+    const reader = workerRes.body.getReader();
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Forward chunk to client
+        res.write(Buffer.from(value));
+      }
+
+      res.end();
+    } catch (err: any) {
+      logger.error(`Stream reading error: ${err.message}`);
+      res.write(
+        `data: ${JSON.stringify({ type: "error", error: "Stream interrupted", done: true })}\n\n`,
+      );
+      res.end();
+    }
+
+    logger.info(`Completed streaming analysis for log ${id}`);
+  } catch (err: any) {
+    logger.error(`Failed to stream analysis for log ${id}: ${err.message}`);
+    res.write(
+      `data: ${JSON.stringify({ type: "error", error: err.message, done: true })}\n\n`,
+    );
+    res.end();
   }
 };
