@@ -22,6 +22,54 @@ class APIClient:
             },
         )
 
+    async def get_log(self, log_id: str) -> Optional[LogEntry]:
+        url = f"{self.base_url}/api/logs/{log_id}"
+
+        try:
+            response = await self.client.get(url)
+
+            if response.status_code == 404:
+                return None
+
+            response.raise_for_status()
+
+            data = response.json()
+            if not data.get("success"):
+                raise APIError(f"API returned error: {data.get('error')}")
+
+            log_data = data.get("data", {})
+            return LogEntry.model_validate(log_data)
+
+        except httpx.HTTPStatusError as e:
+            raise APIError(
+                f"HTTP error {e.response.status_code}: {e.response.text}"
+            ) from e
+        except httpx.RequestError as e:
+            raise APIError(f"Request failed: {e}") from e
+
+    async def get_recent_logs(self, limit: int = 20) -> list[LogEntry]:
+        url = f"{self.base_url}/api/logs"
+
+        try:
+            response = await self.client.get(url, params={"limit": limit})
+            response.raise_for_status()
+
+            data = response.json()
+            if not data.get("success"):
+                raise APIError(f"API returned error: {data.get('error')}")
+
+            logs_data = data.get("data", [])
+            return [LogEntry.model_validate(log) for log in logs_data]
+
+        except httpx.HTTPStatusError as e:
+            raise APIError(
+                f"HTTP error {e.response.status_code}: {e.response.text}"
+            ) from e
+        except httpx.RequestError as e:
+            raise APIError(f"Request failed: {e}") from e
+        except Exception as e:
+            raise APIError(f"Failed to parse logs: {e}") from e
+
     async def get_pending_logs(self, limit: int = 50) -> list[LogEntry]:
         url = f"{self.base_url}/api/logs/analysis/pending"
 
