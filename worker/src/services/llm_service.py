@@ -51,6 +51,48 @@ Respond ONLY with valid JSON matching the requested format."""
 
         return result
 
+    async def analyze_stream(
+        self,
+        log: LogEntry,
+        context: list[LogEntry],
+    ):
+        prompt = self._build_prompt(log, context)
+        url = f"{self.host}/api/generate"
+
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "system": self.SYSTEM_PROMPT,
+            "stream": True,
+            "options": {
+                "temperature": config.ollama_temperature,
+                "num_predict": 1024,
+            },
+        }
+
+        try:
+            async with self.client.stream("POST", url, json=payload) as response:
+                response.raise_for_status()
+
+                full_response = ""
+                async for line in response.aiter_lines():
+                    if line.strip():
+                        try:
+                            chunk_data = json.loads(line)
+                            response_content = chunk_data.get("response", "")
+                            if response_content:
+                                full_response += response_content
+                                yield response_content
+                        except json.JSONDecodeError:
+                            continue
+
+        except httpx.HTTPStatusError as e:
+            raise LLMError(
+                f"Ollama HTTP error: {e.response.status_code} - {e.response.text}"
+            ) from e
+        except httpx.RequestError as e:
+            raise LLMError(f"Failed to connect to Ollama: {e}") from e
+
     def _build_prompt(self, log: LogEntry, context: list[LogEntry]) -> str:
         context_str = "\n".join(
             f"  - [{ctx.timestamp}] {ctx.level.value} {ctx.source}: {ctx.message[:100]}"
