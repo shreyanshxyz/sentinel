@@ -142,11 +142,6 @@ export function useStreamingAnalysis(logId: string) {
       setStreaming(false);
     };
 
-    eventSource.onclose = () => {
-      console.log("SSE connection closed");
-      setStreaming(false);
-    };
-
     return () => {
       eventSource.close();
       controller.abort();
