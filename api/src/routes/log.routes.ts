@@ -12,6 +12,7 @@ import {
   getPendingLogs,
   getAnalysisStats,
   getCriticalAnalyses,
+  streamAnalysis,
 } from "../controllers/ai.controller.js";
 
 const router = Router();
@@ -22,6 +23,8 @@ router.get("/live", streamLogs);
 router.get("/:id", getLogById);
 
 router.get("/:id/analysis", getLogAnalysis);
+
+router.get("/:id/analyze-stream", streamAnalysis);
 
 router.post("/:id/analyze", triggerAnalysis);
 
