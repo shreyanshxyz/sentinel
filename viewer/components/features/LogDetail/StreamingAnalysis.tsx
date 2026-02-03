@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "../../ui/Card";
 import { Badge } from "../../ui/Badge";
 import { Spinner } from "../../ui/Spinner";
@@ -16,12 +16,13 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
   logId,
   error: errorProp,
 }) => {
-  const [streaming, setStreaming] = React.useState(true);
-  const [content, setContent] = React.useState("");
-  const [analysis, setAnalysis] = React.useState<AIInsight | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const eventSourceRef = React.useRef<EventSource | null>(null);
-  const [retryCount, setRetryCount] = React.useState(0);
+  const [streaming, setStreaming] = useState(true);
+  const [content, setContent] = useState("");
+  const [analysis, setAnalysis] = useState<AIInsight | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const retryCountRef = useRef(0);
+  const isMountedRef = useRef(true);
 
   const getSeverityColor = (severity: string) => {
     const colors: Record<string, string> = {
@@ -33,17 +34,28 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     return colors[severity] || "text-terminal-muted border-terminal-border";
   };
 
-  const startStreaming = React.useCallback(() => {
-    if (!logId) return;
+  const handleRetry = useCallback(() => {
+    retryCountRef.current = 0;
+    setError(null);
+    if (isMountedRef.current) {
+      startStreaming();
+    }
+  }, []);
+
+  const startStreaming = useCallback(() => {
+    if (!logId || !isMountedRef.current) return;
+
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
 
     setStreaming(true);
     setContent("");
     setAnalysis(null);
     setError(null);
 
-    const eventSource = new EventSource(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}/logs/${logId}/analyze-stream`,
-    );
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+    const eventSource = new EventSource(`${apiUrl}/logs/${logId}/analyze-stream`);
 
     eventSourceRef.current = eventSource;
 
@@ -52,31 +64,22 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     };
 
     eventSource.onmessage = (event) => {
+      if (!isMountedRef.current) return;
+      
       try {
         const data = JSON.parse(event.data);
 
         switch (data.type) {
           case "start":
-            console.log(
-              "[StreamingAnalysis] Analysis started for log:",
-              data.logId,
-            );
+            console.log("[StreamingAnalysis] Analysis started for log:", data.logId);
             break;
 
           case "chunk":
-            console.log(
-              "[StreamingAnalysis] Received chunk:",
-              data.content.length,
-              "chars",
-            );
             setContent((prev) => prev + data.content);
             break;
 
           case "analysis":
-            console.log(
-              "[StreamingAnalysis] Analysis complete:",
-              data.analysis,
-            );
+            console.log("[StreamingAnalysis] Analysis complete:", data.analysis);
             setAnalysis(data.analysis);
             setStreaming(false);
             eventSource.close();
@@ -97,40 +100,36 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
       }
     };
 
-    eventSource.onerror = (err) => {
-      console.error("[StreamingAnalysis] SSE connection error:", err);
-      if (retryCount < 3) {
-        setRetryCount((prev) => prev + 1);
-        setTimeout(() => startStreaming(), 2000);
-      } else {
+    eventSource.onerror = () => {
+      console.error("[StreamingAnalysis] SSE connection error");
+      if (retryCountRef.current < 3 && isMountedRef.current) {
+        retryCountRef.current += 1;
+        setTimeout(() => {
+          if (isMountedRef.current) {
+            startStreaming();
+          }
+        }, 2000);
+      } else if (isMountedRef.current) {
         setError("Connection failed. Please try again.");
         setStreaming(false);
       }
     };
+  }, [logId]);
 
-    eventSource.onclose = () => {
-      console.log("[StreamingAnalysis] SSE connection closed");
-      setStreaming(false);
-    };
-  }, [logId, retryCount]);
-
-  const handleRetry = React.useCallback(() => {
-    setRetryCount(0);
-    setError(null);
-    startStreaming();
-  }, [startStreaming]);
-
-  React.useEffect(() => {
-    if (logId && streaming && !error && !analysis) {
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    if (logId) {
       startStreaming();
     }
 
     return () => {
+      isMountedRef.current = false;
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
     };
-  }, [logId, streaming, error, analysis, startStreaming]);
+  }, [logId, startStreaming]);
 
   if (errorProp || error) {
     return (
@@ -193,7 +192,7 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
                 <span className="text-purple-400">]</span>
               </div>
               <div className="font-mono leading-relaxed text-sm">
-                <pre className="whitespace-pre-wrap wrap-break-word text-text-primary">
+                <pre className="whitespace-pre-wrap break-words text-text-primary">
                   {content}
                   <span className="terminal-cursor">█</span>
                 </pre>
@@ -218,10 +217,13 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
               <span className="text-purple-400">]</span>
             </CardTitle>
             <Badge
-              variant={analysis.severity === "critical" ? "danger" : "outline"}
+              variant="outline"
               className={cn(
                 "text-xs font-mono",
-                getSeverityColor(analysis.severity),
+                analysis.severity === "critical" && "border-log-fatal/50 text-log-fatal",
+                analysis.severity === "high" && "border-log-error/50 text-log-error",
+                analysis.severity === "medium" && "border-log-warn/50 text-log-warn",
+                analysis.severity === "low" && "border-log-info/50 text-log-info",
               )}
             >
               {analysis.severity.toUpperCase()}
