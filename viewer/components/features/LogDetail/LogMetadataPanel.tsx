@@ -91,7 +91,7 @@ export const LogMetadataPanel: React.FC<LogMetadataPanelProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-4">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
             <span className="text-terminal-accent">[</span>

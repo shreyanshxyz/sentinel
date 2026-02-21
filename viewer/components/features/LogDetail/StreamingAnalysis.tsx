@@ -24,6 +24,28 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
   const retryCountRef = useRef(0);
   const isMountedRef = useRef(true);
 
+  const highlightJSON = (json: string): React.ReactNode => {
+    const lines = json.split("\n");
+    return (
+      <>
+        {lines.map((line, i) => {
+          const highlighted = line
+            .replace(/"([^"]+)":/g, '<span class="text-cyan-400">"$1"</span>:')
+            .replace(/: "([^"]*)"/g, ': <span class="text-green-400">"$1"</span>')
+            .replace(/: (\d+\.?\d*)/g, ': <span class="text-orange-400">$1</span>')
+            .replace(/: (true|false)/g, ': <span class="text-blue-400">$1</span>')
+            .replace(/: (null)/g, ': <span class="text-blue-400">$1</span>');
+          return (
+            <span key={i}>
+              <span dangerouslySetInnerHTML={{ __html: highlighted }} />
+              {i < lines.length - 1 && "\n"}
+            </span>
+          );
+        })}
+      </>
+    );
+  };
+
   const getSeverityColor = (severity: string) => {
     const colors: Record<string, string> = {
       low: "text-log-info border-log-info/40",
@@ -193,7 +215,7 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
               </div>
               <div className="font-mono leading-relaxed text-sm">
                 <pre className="whitespace-pre-wrap break-words text-text-primary">
-                  {content}
+                  {highlightJSON(content)}
                   <span className="terminal-cursor">█</span>
                 </pre>
               </div>
