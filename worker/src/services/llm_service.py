@@ -24,13 +24,14 @@ Respond ONLY with valid JSON matching the requested format."""
 
     def __init__(
         self,
-        host: Optional[str] = None,
+        api_key: Optional[str] = None,
         model: Optional[str] = None,
         timeout: Optional[float] = None,
     ):
-        self.host = host or config.ollama_host
-        self.model = model or config.ollama_model
+        self.api_key = api_key or config.groq_api_key
+        self.model = model or config.groq_model
         self.timeout = timeout or config.ollama_timeout
+        self.use_groq = config.use_groq and bool(self.api_key)
 
         self.client = httpx.AsyncClient(timeout=self.timeout)
 
@@ -42,7 +43,7 @@ Respond ONLY with valid JSON matching the requested format."""
     ) -> AIAnalysis:
         prompt = self._build_prompt(log, context)
 
-        response = await self._call_ollama(prompt)
+        response = await self._call_groq(prompt)
 
         result = self._parse_response(response, log.id)
 
@@ -57,21 +58,32 @@ Respond ONLY with valid JSON matching the requested format."""
         context: list[LogEntry],
     ):
         prompt = self._build_prompt(log, context)
-        url = f"{self.host}/api/generate"
+        
+        if not self.use_groq:
+            raise LLMError("Groq is not configured. Set GROQ_API_KEY environment variable.")
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+
+        messages = [
+            {"role": "system", "content": self.SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ]
 
         payload = {
             "model": self.model,
-            "prompt": prompt,
-            "system": self.SYSTEM_PROMPT,
+            "messages": messages,
+            "temperature": config.ollama_temperature,
+            "max_tokens": 1024,
             "stream": True,
-            "options": {
-                "temperature": config.ollama_temperature,
-                "num_predict": 1024,
-            },
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
 
         try:
-            async with self.client.stream("POST", url, json=payload) as response:
+            async with self.client.stream("POST", url, json=payload, headers=headers) as response:
                 response.raise_for_status()
 
                 full_response = ""
@@ -79,19 +91,21 @@ Respond ONLY with valid JSON matching the requested format."""
                     if line.strip():
                         try:
                             chunk_data = json.loads(line)
-                            response_content = chunk_data.get("response", "")
-                            if response_content:
-                                full_response += response_content
-                                yield response_content
+                            if chunk_data.get("choices"):
+                                delta = chunk_data["choices"][0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    full_response += content
+                                    yield content
                         except json.JSONDecodeError:
                             continue
 
         except httpx.HTTPStatusError as e:
             raise LLMError(
-                f"Ollama HTTP error: {e.response.status_code} - {e.response.text}"
+                f"Groq HTTP error: {e.response.status_code} - {e.response.text}"
             ) from e
         except httpx.RequestError as e:
-            raise LLMError(f"Failed to connect to Ollama: {e}") from e
+            raise LLMError(f"Failed to connect to Groq: {e}") from e
 
     def _build_prompt(self, log: LogEntry, context: list[LogEntry]) -> str:
         context_str = "\n".join(
@@ -149,35 +163,45 @@ JSON only, no markdown, no explanations outside the JSON."""
 
         return prompt
 
-    async def _call_ollama(self, prompt: str) -> str:
-        url = f"{self.host}/api/generate"
+    async def _call_groq(self, prompt: str) -> str:
+        if not self.use_groq:
+            raise LLMError("Groq is not configured. Set GROQ_API_KEY environment variable.")
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+
+        messages = [
+            {"role": "system", "content": self.SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ]
 
         payload = {
             "model": self.model,
-            "prompt": prompt,
-            "system": self.SYSTEM_PROMPT,
+            "messages": messages,
+            "temperature": config.ollama_temperature,
+            "max_tokens": 1024,
             "stream": False,
-            "options": {
-                "temperature": config.ollama_temperature,
-                "num_predict": 1024,
-            },
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
 
         try:
-            response = await self.client.post(url, json=payload)
+            response = await self.client.post(url, json=payload, headers=headers)
             response.raise_for_status()
 
             data = response.json()
-            return data.get("response", "")
+            return data["choices"][0]["message"]["content"]
 
         except httpx.HTTPStatusError as e:
             raise LLMError(
-                f"Ollama HTTP error: {e.response.status_code} - {e.response.text}"
+                f"Groq HTTP error: {e.response.status_code} - {e.response.text}"
             ) from e
         except httpx.RequestError as e:
-            raise LLMError(f"Failed to connect to Ollama: {e}") from e
+            raise LLMError(f"Failed to connect to Groq: {e}") from e
         except json.JSONDecodeError as e:
-            raise LLMError(f"Invalid JSON response from Ollama: {e}") from e
+            raise LLMError(f"Invalid JSON response from Groq: {e}") from e
 
     def _parse_response(self, response: str, log_id: str) -> AIAnalysis:
         json_str = self._extract_json(response)
@@ -239,12 +263,23 @@ JSON only, no markdown, no explanations outside the JSON."""
         return text.strip()
 
     async def health_check(self) -> dict[str, Any]:
+        if not self.use_groq:
+            return {
+                "status": "unhealthy",
+                "error": "Groq not configured",
+                "configured_model": self.model,
+            }
+
         try:
-            response = await self.client.get(f"{self.host}/api/tags")
+            url = "https://api.groq.com/openai/v1/models"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+            }
+            response = await self.client.get(url, headers=headers)
             response.raise_for_status()
 
             data = response.json()
-            models = [m.get("name") for m in data.get("models", [])]
+            models = [m.get("id") for m in data.get("data", {})]
 
             return {
                 "status": "healthy",
