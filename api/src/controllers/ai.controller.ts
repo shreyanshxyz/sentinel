@@ -5,23 +5,21 @@ import { ApiResponse, ApiException } from "../types/api.types.js";
 import { AIAnalysis, LogEntry } from "../types/log.types.js";
 import { logger } from "../utils/logger.js";
 import { v4 as uuidv4 } from "uuid";
-import { createReadStream } from "fs";
-import { IncomingMessage, ServerResponse } from "http";
 
-export const getLogAnalysis = (
+export const getLogAnalysis = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const log = logService.getById(id);
+    const log = await logService.getById(id);
     if (!log) {
       throw new ApiException("NOT_FOUND", `Log with id '${id}' not found`, 404);
     }
 
-    const analysis = aiService.getAnalysis(id);
+    const analysis = await aiService.getAnalysis(id);
 
     if (!analysis) {
       throw new ApiException(
@@ -42,15 +40,15 @@ export const getLogAnalysis = (
   }
 };
 
-export const triggerAnalysis = (
+export const triggerAnalysis = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const log = logService.getById(id);
+    const log = await logService.getById(id);
     if (!log) {
       throw new ApiException("NOT_FOUND", `Log with id '${id}' not found`, 404);
     }
@@ -71,16 +69,16 @@ export const triggerAnalysis = (
       status: "pending",
     };
 
-    aiService.saveAnalysis(pendingAnalysis);
+    const saved = await aiService.saveAnalysis(pendingAnalysis);
 
     logger.info("Analysis triggered", {
       logId: id,
-      analysisId: pendingAnalysis.id,
+      analysisId: saved.id,
     });
 
     const response: ApiResponse<AIAnalysis> = {
       success: true,
-      data: pendingAnalysis,
+      data: saved,
       meta: {
         message:
           "Analysis triggered. The AI Worker will process this log shortly.",
@@ -93,11 +91,11 @@ export const triggerAnalysis = (
   }
 };
 
-export const storeAnalysis = (
+export const storeAnalysis = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const analysisData = req.body;
 
@@ -143,7 +141,7 @@ export const storeAnalysis = (
       status: "completed",
     };
 
-    const saved = aiService.saveAnalysis(analysis);
+    const saved = await aiService.saveAnalysis(analysis);
 
     logger.info("Analysis stored", {
       analysisId: saved.id,
@@ -163,21 +161,20 @@ export const storeAnalysis = (
   }
 };
 
-export const getPendingLogs = (
+export const getPendingLogs = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
-    const recentLogs = logService.getRecent(limit * 2);
-    const pendingAnalyses = aiService.getPendingAnalyses();
-    const pendingLogIds = aiService.getPendingAnalysisLogIds();
+    const recentLogs = await logService.getRecent(limit * 2);
+    const pendingLogIds = await aiService.getPendingAnalysisLogIds();
 
     logger.info("getPendingLogs called", {
       totalRecentLogs: recentLogs.length,
-      pendingAnalysesCount: pendingAnalyses.length,
+      pendingLogIdsCount: pendingLogIds.length,
       pendingLogIds: pendingLogIds,
     });
 
@@ -197,7 +194,6 @@ export const getPendingLogs = (
 
     logger.info("Pending logs response", {
       totalRecentLogs: recentLogs.length,
-      pendingAnalysesCount: pendingAnalyses.length,
       totalPending: pendingLogs.length,
       returned: limitedLogs.length,
       errorCount: errorLogs.length,
@@ -220,13 +216,13 @@ export const getPendingLogs = (
   }
 };
 
-export const getAnalysisStats = (
+export const getAnalysisStats = async (
   _req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
-    const stats = aiService.getStatistics();
+    const stats = await aiService.getStatistics();
 
     const response: ApiResponse<typeof stats> = {
       success: true,
@@ -239,13 +235,13 @@ export const getAnalysisStats = (
   }
 };
 
-export const getCriticalAnalyses = (
+export const getCriticalAnalyses = async (
   _req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
-    const critical = aiService.getCriticalAnalyses();
+    const critical = await aiService.getCriticalAnalyses();
 
     const response: ApiResponse<AIAnalysis[]> = {
       success: true,
@@ -261,11 +257,11 @@ export const getCriticalAnalyses = (
 export const streamAnalysis = async (
   req: Request,
   res: Response,
-  next: NextFunction,
+  _next: NextFunction,
 ): Promise<void> => {
   const { id } = req.params;
 
-  const log = logService.getById(id);
+  const log = await logService.getById(id);
   if (!log) {
     throw new ApiException("NOT_FOUND", `Log with id '${id}' not found`, 404);
   }
@@ -305,13 +301,13 @@ export const streamAnalysis = async (
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Forward chunk to client
         res.write(Buffer.from(value));
       }
 
       res.end();
-    } catch (err: any) {
-      logger.error(`Stream reading error: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      logger.error(`Stream reading error: ${message}`);
       res.write(
         `data: ${JSON.stringify({ type: "error", error: "Stream interrupted", done: true })}\n\n`,
       );
@@ -319,10 +315,11 @@ export const streamAnalysis = async (
     }
 
     logger.info(`Completed streaming analysis for log ${id}`);
-  } catch (err: any) {
-    logger.error(`Failed to stream analysis for log ${id}: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    logger.error(`Failed to stream analysis for log ${id}: ${message}`);
     res.write(
-      `data: ${JSON.stringify({ type: "error", error: err.message, done: true })}\n\n`,
+      `data: ${JSON.stringify({ type: "error", error: message, done: true })}\n\n`,
     );
     res.end();
   }

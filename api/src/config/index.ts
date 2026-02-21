@@ -19,9 +19,22 @@ export interface LogConfig {
   sseHeartbeatIntervalMs: number;
 }
 
+export interface DatabaseConfig {
+  host: string;
+  port: number;
+  name: string;
+  user: string;
+  password: string;
+  maxConnections: number;
+  ssl: boolean;
+  retentionDays: number;
+  compressionDays: number;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   log: LogConfig;
+  database: DatabaseConfig;
   version: string;
 }
 
@@ -41,6 +54,12 @@ const getEnvNumber = (key: string, defaultValue: number): number => {
   return isNaN(parsed) ? defaultValue : parsed;
 };
 
+const getEnvBoolean = (key: string, defaultValue: boolean): boolean => {
+  const value = process.env[key];
+  if (!value) return defaultValue;
+  return value.toLowerCase() === "true" || value === "1";
+};
+
 export const appConfig: AppConfig = {
   server: {
     port: getEnvNumber("PORT", 8000),
@@ -56,6 +75,17 @@ export const appConfig: AppConfig = {
     defaultPageSize: getEnvNumber("DEFAULT_PAGE_SIZE", 20),
     maxPageSize: getEnvNumber("MAX_PAGE_SIZE", 100),
     sseHeartbeatIntervalMs: getEnvNumber("SSE_HEARTBEAT_INTERVAL_MS", 30000),
+  },
+  database: {
+    host: getEnv("DATABASE_HOST", "localhost"),
+    port: getEnvNumber("DATABASE_PORT", 5432),
+    name: getEnv("DATABASE_NAME", "sentinel"),
+    user: getEnv("DATABASE_USER", "sentinel"),
+    password: getEnv("DATABASE_PASSWORD", "sentinel_password"),
+    maxConnections: getEnvNumber("DATABASE_MAX_CONNECTIONS", 20),
+    ssl: getEnvBoolean("DATABASE_SSL", false),
+    retentionDays: getEnvNumber("LOG_RETENTION_DAYS", 30),
+    compressionDays: getEnvNumber("LOG_COMPRESSION_DAYS", 7),
   },
   version: getEnv("APP_VERSION", "1.0.0"),
 };
