@@ -151,7 +151,7 @@ export const LogFeed: React.FC<LogFeedProps> = ({
                     size="sm"
                     className="shrink-0 w-11.25 justify-center"
                   >
-                    {log.level.slice(0, 4)}
+                    {log.level.slice(0, 10)}
                   </Badge>
 
                   <span className="text-log-info font-mono text-[11px] whitespace-nowrap shrink-0 opacity-80">
