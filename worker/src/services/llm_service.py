@@ -7,6 +7,7 @@ import httpx
 from config import config
 from models.analysis import AIAnalysis, FollowUpAction, Severity
 from models.log import LogEntry, LogLevel
+from utils.logger import logger
 
 
 class LLMService:
@@ -84,27 +85,48 @@ Respond ONLY with valid JSON matching the requested format."""
 
         try:
             async with self.client.stream("POST", url, json=payload, headers=headers) as response:
-                response.raise_for_status()
+                if response.status_code != 200:
+                    error_body = await response.aread()
+                    error_text = error_body.decode('utf-8')
+                    logger.error(f"Groq API error", status_code=response.status_code, error=error_text)
+                    raise LLMError(f"Groq API error {response.status_code}: {error_text}")
 
                 full_response = ""
                 async for line in response.aiter_lines():
-                    if line.strip():
-                        try:
-                            chunk_data = json.loads(line)
-                            if chunk_data.get("choices"):
-                                delta = chunk_data["choices"][0].get("delta", {})
-                                content = delta.get("content", "")
-                                if content:
-                                    full_response += content
-                                    yield content
-                        except json.JSONDecodeError:
-                            continue
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    if line.startswith("data: "):
+                        line = line[6:]  
+                    
+                    if not line or line == "[DONE]":
+                        continue
+                    
+                    try:
+                        chunk_data = json.loads(line)
+                        if chunk_data.get("choices"):
+                            delta = chunk_data["choices"][0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                full_response += content
+                                yield content
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse chunk as JSON", line=line[:100], error=str(e))
+                        continue
+                
+                logger.info(f"Groq streaming complete", model=self.model, response_length=len(full_response))
 
         except httpx.HTTPStatusError as e:
-            raise LLMError(
-                f"Groq HTTP error: {e.response.status_code} - {e.response.text}"
-            ) from e
+            error_detail = ""
+            try:
+                error_detail = e.response.text
+            except:
+                pass
+            logger.error(f"Groq HTTP error", status_code=e.response.status_code, error=error_detail)
+            raise LLMError(f"Groq HTTP error {e.response.status_code}: {error_detail}") from e
         except httpx.RequestError as e:
+            logger.error(f"Failed to connect to Groq", error=str(e))
             raise LLMError(f"Failed to connect to Groq: {e}") from e
 
     def _build_prompt(self, log: LogEntry, context: list[LogEntry]) -> str:
