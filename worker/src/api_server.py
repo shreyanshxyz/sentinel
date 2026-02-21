@@ -54,7 +54,8 @@ async def health_check():
         "status": "healthy",
         "service": "sentinel-worker-api",
         "port": config.worker_http_port,
-        "model": config.ollama_model
+        "model": config.groq_model,
+        "provider": "groq" if config.use_groq else "ollama"
     }
 
 
@@ -102,6 +103,7 @@ async def stream_response(
 
         summary_parts = []
         async for chunk in llm_service.analyze_stream(log, all_logs):
+            logger.debug(f"LLM chunk received", chunk_preview=chunk[:100] if chunk else "")
             summary_parts.append(chunk)
             yield format_sse_event({
                 "type": "chunk",
@@ -110,6 +112,7 @@ async def stream_response(
             })
 
         summary = "".join(summary_parts)
+        logger.info(f"LLM analysis complete", log_id=log.id, summary_length=len(summary))
         root_cause = extract_root_cause(summary)
         severity = determine_severity(log, summary, anomalies)
 
@@ -124,7 +127,7 @@ async def stream_response(
                 "relatedLogs": [],
                 "followUps": [],
                 "anomalyScore": max([a.score for a in anomalies] or [0]),
-                "modelVersion": config.ollama_model,
+                "modelVersion": config.groq_model,
                 "status": "completed"
             },
             "done": True
