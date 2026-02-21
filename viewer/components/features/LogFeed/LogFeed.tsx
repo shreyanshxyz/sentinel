@@ -122,15 +122,12 @@ export const LogFeed: React.FC<LogFeedProps> = ({
         {logs.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-terminal-muted">
             <div className="text-center">
-              <div className="terminal-cursor text-terminal-fg text-lg mb-2">
-                _
-              </div>
-              <div className="text-terminal-fg text-lg mb-2">_</div>
+              <div className="terminal-cursor text-terminal-fg text-lg mb-2">_</div>
               <p className="font-mono text-xs">WAITING FOR INPUT...</p>
             </div>
           </div>
         ) : (
-          <div>
+          <div className="mt-2">
             {logs.map((log) => {
               const logContent = (
                 <div
