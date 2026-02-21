@@ -12,38 +12,65 @@ export interface StreamingAnalysisProps {
   error?: string | null;
 }
 
+interface StreamingState {
+  summary: string;
+  rootCause: string;
+  severity: string;
+  confidence: number;
+  patterns: string[];
+  recommendations: Array<{
+    title: string;
+    description: string;
+    priority: string;
+    type: string;
+  }>;
+}
+
 export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
   logId,
   error: errorProp,
 }) => {
   const [streaming, setStreaming] = useState(true);
-  const [content, setContent] = useState("");
+  const [streamingState, setStreamingState] = useState<StreamingState>({
+    summary: "",
+    rootCause: "",
+    severity: "low",
+    confidence: 0,
+    patterns: [],
+    recommendations: [],
+  });
   const [analysis, setAnalysis] = useState<AIInsight | null>(null);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const retryCountRef = useRef(0);
   const isMountedRef = useRef(true);
 
-  const highlightJSON = (json: string): React.ReactNode => {
-    const lines = json.split("\n");
-    return (
-      <>
-        {lines.map((line, i) => {
-          const highlighted = line
-            .replace(/"([^"]+)":/g, '<span class="text-cyan-400">"$1"</span>:')
-            .replace(/: "([^"]*)"/g, ': <span class="text-green-400">"$1"</span>')
-            .replace(/: (\d+\.?\d*)/g, ': <span class="text-orange-400">$1</span>')
-            .replace(/: (true|false)/g, ': <span class="text-blue-400">$1</span>')
-            .replace(/: (null)/g, ': <span class="text-blue-400">$1</span>');
-          return (
-            <span key={i}>
-              <span dangerouslySetInnerHTML={{ __html: highlighted }} />
-              {i < lines.length - 1 && "\n"}
-            </span>
-          );
-        })}
-      </>
-    );
+  const parseStreamingJson = (jsonStr: string): StreamingState => {
+    const state: StreamingState = {
+      summary: "",
+      rootCause: "",
+      severity: "low",
+      confidence: 0,
+      patterns: [],
+      recommendations: [],
+    };
+
+    try {
+      const match = jsonStr.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (parsed.summary) state.summary = parsed.summary;
+        if (parsed.root_cause) state.rootCause = parsed.root_cause;
+        if (parsed.severity) state.severity = parsed.severity;
+        if (parsed.confidence) state.confidence = parsed.confidence;
+        if (parsed.patterns) state.patterns = parsed.patterns;
+        if (parsed.recommendations) state.recommendations = parsed.recommendations;
+      }
+    } catch {
+      // Still building JSON, return current state
+    }
+
+    return state;
   };
 
   const getSeverityColor = (severity: string) => {
@@ -55,6 +82,8 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     };
     return colors[severity] || "text-terminal-muted border-terminal-border";
   };
+
+  const rawContentRef = useRef<string>("");
 
   const handleRetry = useCallback(() => {
     retryCountRef.current = 0;
@@ -72,7 +101,15 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     }
 
     setStreaming(true);
-    setContent("");
+    rawContentRef.current = "";
+    setStreamingState({
+      summary: "",
+      rootCause: "",
+      severity: "low",
+      confidence: 0,
+      patterns: [],
+      recommendations: [],
+    });
     setAnalysis(null);
     setError(null);
 
@@ -97,7 +134,8 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
             break;
 
           case "chunk":
-            setContent((prev) => prev + data.content);
+            rawContentRef.current += data.content;
+            setStreamingState(parseStreamingJson(rawContentRef.current));
             break;
 
           case "analysis":
@@ -174,7 +212,7 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     );
   }
 
-  if (streaming && !content && !analysis) {
+  if (streaming && !streamingState.summary && !analysis) {
     return (
       <div className="min-h-100 flex items-center justify-center">
         <div className="flex flex-col items-center justify-center space-y-4">
@@ -199,28 +237,124 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
               </span>
               <span className="text-purple-400">]</span>
             </CardTitle>
-            <Badge variant="outline" className="text-xs font-mono">
+            <Badge variant="outline" className="text-xs font-mono animate-pulse">
               LIVE STREAMING
             </Badge>
           </div>
         </CardHeader>
 
-        <CardContent className="flex-1 overflow-y-auto p-4">
-          <div className="space-y-4">
+        <CardContent className="flex-1 overflow-y-auto p-4 space-y-6">
+          {streamingState.confidence > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
                 <span className="text-purple-400">[</span>
-                <span>Analysis</span>
+                <span>Confidence</span>
                 <span className="text-purple-400">]</span>
               </div>
-              <div className="font-mono leading-relaxed text-sm">
-                <pre className="whitespace-pre-wrap break-words text-text-primary">
-                  {highlightJSON(content)}
-                  <span className="terminal-cursor">█</span>
-                </pre>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-2 bg-terminal-input rounded-full overflow-hidden">
+                  <div
+                    className="h-full transition-all duration-300 bg-green-500"
+                    style={{ width: `${Math.round(streamingState.confidence * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs font-mono text-terminal-muted">
+                  {Math.round(streamingState.confidence * 100)}%
+                </span>
               </div>
             </div>
-          </div>
+          )}
+
+          {streamingState.summary && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
+                <span className="text-purple-400">[</span>
+                <span>Summary</span>
+                <span className="text-purple-400">]</span>
+              </div>
+              <div className="pl-3 border-l border-purple-400/30">
+                <p className="text-sm text-text-primary font-mono leading-relaxed">
+                  {streamingState.summary}
+                  <span className="terminal-cursor ml-1">█</span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {streamingState.rootCause && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
+                <span className="text-purple-400">[</span>
+                <span>Root Cause</span>
+                <span className="text-purple-400">]</span>
+              </div>
+              <div className="pl-3 border-l border-purple-400/30">
+                <div className="bg-terminal-input/50 p-3 border border-purple-400/20 rounded">
+                  <p className="text-sm text-text-primary font-mono leading-relaxed">
+                    {streamingState.rootCause}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {streamingState.patterns.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
+                <span className="text-purple-400">[</span>
+                <span>Patterns</span>
+                <span className="text-purple-400">]</span>
+              </div>
+              <div className="flex flex-wrap gap-2 pl-3">
+                {streamingState.patterns.map((pattern, i) => (
+                  <Badge key={i} variant="outline" className="text-xs font-mono text-purple-400 border-purple-400/40">
+                    {pattern}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {streamingState.recommendations.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
+                <span className="text-purple-400">[</span>
+                <span>Suggested Follow-ups</span>
+                <span className="text-purple-400">]</span>
+              </div>
+              <div className="space-y-2 pl-3 border-l border-purple-400/30">
+                {streamingState.recommendations.map((rec, i) => (
+                  <div
+                    key={i}
+                    className="bg-terminal-input/30 p-3 border border-terminal-border rounded"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <p className="text-xs font-mono text-terminal-muted uppercase tracking-wider">
+                          {rec.title}
+                        </p>
+                        <p className="text-sm text-text-primary font-mono leading-relaxed mt-1">
+                          {rec.description}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn("text-xs font-mono", getSeverityColor(rec.priority))}
+                      >
+                        {rec.priority.toUpperCase()}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!streamingState.summary && !streamingState.rootCause && (
+            <div className="flex items-center justify-center py-8">
+              <Spinner variant="dots" size="md" text="Analyzing..." />
+            </div>
+          )}
         </CardContent>
       </Card>
     );
