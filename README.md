@@ -10,6 +10,16 @@
 
 Sentinel is a production-ready log aggregation platform with real-time AI-powered analysis. It ingests logs from multiple sources, detects anomalies using statistical algorithms and LLM-based reasoning, and provides actionable insights through an intuitive web interface.
 
+## Screenshots
+
+| Log Dashboard | AI Analysis |
+|:-------------:|:-----------:|
+| ![Log Dashboard](screenshots/log-dashboard.png) | ![AI Analysis](screenshots/ai-analysis.png) |
+
+| Analytics | Search | Settings |
+|:---------:|:------:|:--------:|
+| ![Analytics](screenshots/analytics.png) | ![Search](screenshots/search.png) | ![Settings](screenshots/settings.png) |
+
 ## Architecture
 
 ```
@@ -20,7 +30,7 @@ Sentinel is a production-ready log aggregation platform with real-time AI-powere
                                │                         │
                                ▼                         ▼
                         ┌─────────────┐           ┌─────────────┐
-                        │  In-Memory  │           │   Ollama    │
+                        │  In-Memory  │           │    Groq     │
                         │  Log Store  │           │    LLM      │
                         └─────────────┘           └─────────────┘
 ```
@@ -30,6 +40,8 @@ Sentinel is a production-ready log aggregation platform with real-time AI-powere
 - **API Layer** (`api/`): TypeScript/Express ingestion service with SSE streaming
 - **AI Worker** (`worker/`): Python-based analysis engine with anomaly detection and LLM integration
 - **Viewer** (`viewer/`): Next.js 16 dashboard with real-time log feeds and AI insights
+
+> ⚠️ **Note**: The backend is hosted on Render's free tier. Initial requests may take 30-60 seconds while the service wakes up from cold start.
 
 ## Features
 
@@ -44,7 +56,7 @@ Sentinel is a production-ready log aggregation platform with real-time AI-powere
 
 - **Statistical Anomaly Detection** - Error rate spikes, frequency anomalies, source dominance
 - **Pattern Matching** - 20+ regex patterns for authentication, database, network, and memory issues
-- **LLM Integration** - Ollama-powered analysis with structured JSON output
+- **LLM Integration** - Groq-powered analysis with streaming JSON output
 - **Smart Prioritization** - Automatically prioritizes errors and critical patterns
 - **Contextual Analysis** - Gathers related logs for comprehensive incident understanding
 
@@ -62,7 +74,7 @@ Sentinel is a production-ready log aggregation platform with real-time AI-powere
 
 - Node.js 18+ and npm
 - Python 3.11+ with pip
-- [Ollama](https://ollama.com/) (optional, for AI analysis)
+- Groq API key (for AI analysis)
 
 ### 1. Clone and Setup
 
@@ -91,7 +103,7 @@ cp .env.example .env
 # Worker configuration
 cd ../worker
 cp .env.example .env
-# Edit .env with your settings
+# Add your GROQ_API_KEY to .env
 ```
 
 ### 3. Start Services
@@ -108,6 +120,8 @@ cd worker && python -m src.main
 ```
 
 The viewer will be available at `http://localhost:3000` and the API at `http://localhost:8000`.
+
+> 💡 **Live Demo**: The application is deployed at [sentinel-one-beta.vercel.app](https://sentinel-one-beta.vercel.app). Note that the Render backend may take 30-60 seconds to wake up on first load.
 
 ## API Reference
 
@@ -166,8 +180,9 @@ GET /api/logs/analysis/stats        # Analysis statistics
 | Variable               | Default                | Description                   |
 | ---------------------- | ---------------------- | ----------------------------- |
 | `API_BASE_URL`         | http://localhost:8000  | API endpoint                  |
-| `OLLAMA_HOST`          | http://localhost:11434 | LLM service URL               |
-| `OLLAMA_MODEL`         | llama3.1:8b            | Model for analysis            |
+| `GROQ_API_KEY`         | -                      | Groq API key (required)       |
+| `GROQ_MODEL`           | llama-3.1-8b-instant   | Model for analysis            |
+| `USE_GROQ`             | true                   | Enable Groq (vs local Ollama) |
 | `ANALYSIS_INTERVAL`    | 60                     | Seconds between analysis runs |
 | `BATCH_SIZE`           | 50                     | Logs per batch                |
 | `ERROR_RATE_THRESHOLD` | 0.1                    | Anomaly trigger threshold     |
@@ -236,7 +251,7 @@ npm run build        # Production build
 2. **Storage** - In-memory ring buffer with O(1) append
 3. **Streaming** - SSE broadcasts to connected viewers
 4. **Analysis** - Worker polls pending logs, runs anomaly detection
-5. **LLM Processing** - Context-aware prompts sent to Ollama
+5. **LLM Processing** - Context-aware prompts sent to Groq API
 6. **Insights** - Structured analysis stored back to API
 
 ### Anomaly Detection
@@ -255,8 +270,8 @@ The worker employs multiple detection strategies:
 3. Select high-priority logs (errors + anomalies)
 4. Build context from related logs
 5. Generate structured LLM prompt
-6. Parse JSON response with fallback handling
-7. Store analysis results
+6. Stream response from Groq API
+7. Parse JSON response and store analysis results
 
 ## Tech Stack
 
@@ -267,10 +282,23 @@ The worker employs multiple detection strategies:
 | Logging     | Winston                              |
 | AI Worker   | Python 3.11+, Pydantic, APScheduler  |
 | HTTP Client | httpx                                |
-| LLM         | Ollama (local), llama3.1:8b          |
+| LLM         | Groq API, llama-3.1-8b-instant       |
 | Viewer      | Next.js 16, React 19, TypeScript     |
 | Styling     | Tailwind CSS 4                       |
 | UI          | Custom components                    |
+
+## Deployment
+
+The application is designed for easy deployment:
+
+- **Frontend**: Deploy the `viewer/` to Vercel or any static hosting
+- **API**: Deploy the `api/` to Render, Railway, or any Node.js host
+- **Worker**: Deploy the `worker/` to Render, Railway, or any Python host
+
+Required environment variables for production:
+- `GROQ_API_KEY` - Get yours at [console.groq.com](https://console.groq.com)
+- `WORKER_BASE_URL` - URL of your worker service (for API)
+- `API_BASE_URL` - URL of your API service (for Worker)
 
 ## License
 
