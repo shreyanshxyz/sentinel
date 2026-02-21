@@ -1,117 +1,95 @@
-import { LogEntry, AIAnalysis } from "../types/log.types.js";
+import { AIAnalysis } from "../types/log.types.js";
+import { 
+  analysisRepository, 
+  CreateAnalysisInput 
+} from "../db/repositories/analysis.repository.js";
 import { logger } from "../utils/logger.js";
 
 class AIService {
-  private analyses: Map<string, AIAnalysis> = new Map();
-
-  private logService: { getById: (id: string) => LogEntry | undefined } | null =
-    null;
-
-  initialize(logService: {
-    getById: (id: string) => LogEntry | undefined;
-  }): void {
-    this.logService = logService;
-    logger.info("AI Service initialized");
-  }
-
-  saveAnalysis(analysis: AIAnalysis): AIAnalysis {
-    this.analyses.set(analysis.logId, analysis);
-
-    logger.debug("AI analysis saved", {
-      analysisId: analysis.id,
+  async saveAnalysis(analysis: AIAnalysis): Promise<AIAnalysis> {
+    const input: CreateAnalysisInput = {
+      id: analysis.id,
       logId: analysis.logId,
+      summary: analysis.summary,
+      rootCause: analysis.rootCause,
       severity: analysis.severity,
       confidence: analysis.confidence,
+      patterns: analysis.patterns,
+      relatedLogs: analysis.relatedLogs,
+      followUps: analysis.followUps,
+      anomalyScore: analysis.anomalyScore,
+      modelVersion: analysis.modelVersion,
+      status: analysis.status,
+    };
+
+    const saved = await analysisRepository.save(input);
+
+    logger.debug("AI analysis saved", {
+      analysisId: saved.id,
+      logId: saved.logId,
+      severity: saved.severity,
+      confidence: saved.confidence,
     });
 
-    return analysis;
+    return saved;
   }
 
-  getAnalysis(logId: string): AIAnalysis | undefined {
-    return this.analyses.get(logId);
+  async getAnalysis(logId: string): Promise<AIAnalysis | null> {
+    return analysisRepository.getByLogId(logId);
   }
 
-  hasAnalysis(logId: string): boolean {
-    return this.analyses.has(logId);
+  async hasAnalysis(logId: string): Promise<boolean> {
+    return analysisRepository.hasAnalysis(logId);
   }
 
-  hasPendingAnalysis(logId: string): boolean {
-    const analysis = this.analyses.get(logId);
-    return analysis?.status === "pending";
+  async hasPendingAnalysis(logId: string): Promise<boolean> {
+    return analysisRepository.hasPendingAnalysis(logId);
   }
 
-  getPendingAnalyses(): AIAnalysis[] {
-    return this.getAllAnalyses().filter((a) => a.status === "pending");
+  async getPendingAnalyses(): Promise<AIAnalysis[]> {
+    return analysisRepository.getPendingAnalyses();
   }
 
-  getPendingAnalysisLogIds(): string[] {
-    return this.getPendingAnalyses().map((a) => a.logId);
+  async getPendingAnalysisLogIds(): Promise<string[]> {
+    return analysisRepository.getPendingLogIds();
   }
 
-  getAllAnalyses(): AIAnalysis[] {
-    return Array.from(this.analyses.values());
+  async getAllAnalyses(): Promise<AIAnalysis[]> {
+    return analysisRepository.getAll();
   }
 
-  getAnalysesBySeverity(severity: AIAnalysis["severity"]): AIAnalysis[] {
-    return this.getAllAnalyses().filter((a) => a.severity === severity);
+  async getAnalysesBySeverity(severity: AIAnalysis["severity"]): Promise<AIAnalysis[]> {
+    return analysisRepository.getBySeverity(severity);
   }
 
-  getHighConfidenceAnalyses(): AIAnalysis[] {
-    return this.getAllAnalyses().filter((a) => a.confidence >= 70);
+  async getHighConfidenceAnalyses(): Promise<AIAnalysis[]> {
+    const all = await analysisRepository.getAll();
+    return all.filter((a) => a.confidence >= 70);
   }
 
-  getCriticalAnalyses(): AIAnalysis[] {
-    return this.getAllAnalyses().filter(
-      (a) => a.severity === "critical" || a.anomalyScore > 0.8,
-    );
+  async getCriticalAnalyses(): Promise<AIAnalysis[]> {
+    return analysisRepository.getCritical();
   }
 
-  deleteAnalysis(logId: string): boolean {
-    const existed = this.analyses.has(logId);
-    this.analyses.delete(logId);
-
-    if (existed) {
+  async deleteAnalysis(logId: string): Promise<boolean> {
+    const deleted = await analysisRepository.delete(logId);
+    if (deleted) {
       logger.debug("AI analysis deleted", { logId });
     }
-
-    return existed;
+    return deleted;
   }
 
-  getAnalysisCount(): number {
-    return this.analyses.size;
+  async getAnalysisCount(): Promise<number> {
+    return analysisRepository.getCount();
   }
 
-  getStatistics(): {
+  async getStatistics(): Promise<{
     total: number;
     bySeverity: Record<string, number>;
     highConfidence: number;
     critical: number;
-  } {
-    const analyses = this.getAllAnalyses();
-
-    const bySeverity: Record<string, number> = {
-      low: 0,
-      medium: 0,
-      high: 0,
-      critical: 0,
-    };
-
-    for (const analysis of analyses) {
-      bySeverity[analysis.severity]++;
-    }
-
-    return {
-      total: analyses.length,
-      bySeverity,
-      highConfidence: analyses.filter((a) => a.confidence >= 70).length,
-      critical: analyses.filter((a) => a.severity === "critical").length,
-    };
-  }
-
-  clearAll(): void {
-    const count = this.analyses.size;
-    this.analyses.clear();
-    logger.info("All AI analyses cleared", { count });
+  }> {
+    return analysisRepository.getStatistics();
   }
 }
 
