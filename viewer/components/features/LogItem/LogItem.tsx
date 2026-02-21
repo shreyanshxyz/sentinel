@@ -87,7 +87,7 @@ export const LogItem: React.FC<LogItemProps> = ({
           size={compact ? "sm" : "sm"}
           className="shrink-0 w-11.25 justify-center"
         >
-          {log.level.slice(0, 4)}
+          {log.level.slice(0, 10)}
         </Badge>
       )}
 
