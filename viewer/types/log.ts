@@ -45,6 +45,8 @@ export interface AIInsight {
   relatedLogs: string[];
   createdAt: string;
   status: "pending" | "completed" | "failed";
+  modelVersion?: string;
+  anomalyScore?: number;
 }
 
 export interface FollowUpAction {
