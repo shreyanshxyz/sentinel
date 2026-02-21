@@ -244,18 +244,6 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
                   {analysis.modelVersion}
                 </Badge>
               )}
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-xs font-mono",
-                  analysis.severity === "critical" && "border-log-fatal/50 text-log-fatal",
-                  analysis.severity === "high" && "border-log-error/50 text-log-error",
-                  analysis.severity === "medium" && "border-log-warn/50 text-log-warn",
-                  analysis.severity === "low" && "border-log-info/50 text-log-info",
-                )}
-              >
-                {analysis.severity.toUpperCase()}
-              </Badge>
             </div>
           </div>
         </CardHeader>
