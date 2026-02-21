@@ -1,8 +1,7 @@
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";  
 
 CREATE TABLE IF NOT EXISTS logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id VARCHAR(255) PRIMARY KEY,
   timestamp TIMESTAMPTZ NOT NULL,
   level VARCHAR(10) NOT NULL CHECK (level IN ('DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL')),
   message TEXT NOT NULL,
@@ -24,8 +23,8 @@ CREATE INDEX IF NOT EXISTS idx_logs_labels ON logs USING gin(labels);
 CREATE INDEX IF NOT EXISTS idx_logs_message_trgm ON logs USING gin(message gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS ai_analyses (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  log_id UUID NOT NULL REFERENCES logs(id) ON DELETE CASCADE,
+  id VARCHAR(255) PRIMARY KEY,
+  log_id VARCHAR(255) NOT NULL REFERENCES logs(id) ON DELETE CASCADE,
   summary TEXT NOT NULL,
   root_cause TEXT,
   severity VARCHAR(20) NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
