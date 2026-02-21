@@ -274,7 +274,7 @@ export const streamAnalysis = async (
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
-    const workerUrl = `http://localhost:8080/process-now`;
+    const workerUrl = `${process.env.WORKER_BASE_URL || 'http://localhost:8080'}/process-now`;
 
     const workerRes = await fetch(workerUrl, {
       method: "POST",
