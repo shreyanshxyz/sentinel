@@ -133,8 +133,8 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
 
   if (errorProp || error) {
     return (
-      <Card variant="bordered" padding="lg" className="min-h-100">
-        <div className="flex flex-col items-center justify-center h-full space-y-4 p-4">
+      <div className="min-h-100 flex items-center justify-center">
+        <div className="flex flex-col items-center justify-center space-y-4 p-4">
           <div className="text-log-error text-center space-y-2">
             <p className="text-sm font-mono">Analysis failed to connect</p>
             <p className="text-xs text-terminal-muted">
@@ -148,26 +148,26 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
             Retry Analysis
           </button>
         </div>
-      </Card>
+      </div>
     );
   }
 
   if (streaming && !content && !analysis) {
     return (
-      <Card variant="bordered" padding="lg" className="min-h-100">
-        <div className="flex flex-col items-center justify-center h-full space-y-4">
+      <div className="min-h-100 flex items-center justify-center">
+        <div className="flex flex-col items-center justify-center space-y-4">
           <Spinner variant="blocks" size="lg" text="CONNECTING..." />
           <p className="text-terminal-muted text-sm font-mono">
             Connecting to AI Worker...
           </p>
         </div>
-      </Card>
+      </div>
     );
   }
 
   if (streaming) {
     return (
-      <Card variant="bordered" padding="lg" className="min-h-100 flex flex-col">
+      <Card variant="default" padding="lg" className="min-h-100 flex flex-col">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -206,7 +206,7 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
 
   if (analysis) {
     return (
-      <Card variant="bordered" padding="lg" className="min-h-100">
+      <Card variant="default" padding="lg" className="min-h-100">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
@@ -216,22 +216,53 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
               </span>
               <span className="text-purple-400">]</span>
             </CardTitle>
-            <Badge
-              variant="outline"
-              className={cn(
-                "text-xs font-mono",
-                analysis.severity === "critical" && "border-log-fatal/50 text-log-fatal",
-                analysis.severity === "high" && "border-log-error/50 text-log-error",
-                analysis.severity === "medium" && "border-log-warn/50 text-log-warn",
-                analysis.severity === "low" && "border-log-info/50 text-log-info",
+            <div className="flex items-center gap-2">
+              {analysis.modelVersion && (
+                <Badge variant="outline" className="text-xs font-mono text-terminal-muted">
+                  {analysis.modelVersion}
+                </Badge>
               )}
-            >
-              {analysis.severity.toUpperCase()}
-            </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-xs font-mono",
+                  analysis.severity === "critical" && "border-log-fatal/50 text-log-fatal",
+                  analysis.severity === "high" && "border-log-error/50 text-log-error",
+                  analysis.severity === "medium" && "border-log-warn/50 text-log-warn",
+                  analysis.severity === "low" && "border-log-info/50 text-log-info",
+                )}
+              >
+                {analysis.severity.toUpperCase()}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
 
         <CardContent className="flex-1 overflow-y-auto p-4 space-y-6">
+          {analysis.confidence !== undefined && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
+                <span className="text-purple-400">[</span>
+                <span>Confidence</span>
+                <span className="text-purple-400">]</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-2 bg-terminal-input rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full transition-all duration-300",
+                      analysis.confidence >= 0.7 ? "bg-green-500" : "bg-yellow-500"
+                    )}
+                    style={{ width: `${Math.round(analysis.confidence * 100)}%` }}
+                  />
+                </div>
+                <span className="text-xs font-mono text-terminal-muted">
+                  {Math.round(analysis.confidence * 100)}%
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
               <span className="text-purple-400">[</span>
