@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from typing import AsyncGenerator
 
 from config import config
@@ -90,6 +91,16 @@ async def process_now(data: dict):
         return {"error": str(e)}, 500
 
 
+def parse_llm_response(response: str) -> dict:
+    try:
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group(0))
+    except json.JSONDecodeError:
+        pass
+    return {}
+
+
 async def stream_response(
     log: LogEntry,
     all_logs: list[LogEntry]
@@ -101,20 +112,53 @@ async def stream_response(
         anomalies = detector.detect([log] + all_logs[:20])
         patterns = matcher.match(log)
 
-        summary_parts = []
+        full_response = ""
         async for chunk in llm_service.analyze_stream(log, all_logs):
             logger.debug(f"LLM chunk received", chunk_preview=chunk[:100] if chunk else "")
-            summary_parts.append(chunk)
+            full_response += chunk
             yield format_sse_event({
                 "type": "chunk",
                 "content": chunk,
                 "done": False
             })
 
-        summary = "".join(summary_parts)
-        logger.info(f"LLM analysis complete", log_id=log.id, summary_length=len(summary))
-        root_cause = extract_root_cause(summary)
-        severity = determine_severity(log, summary, anomalies)
+        logger.info(f"LLM analysis complete", log_id=log.id, response_length=len(full_response))
+
+        parsed = parse_llm_response(full_response)
+
+        summary = parsed.get("summary", "Analysis completed")
+        root_cause = parsed.get("root_cause", "Unknown - analysis complete")
+        severity_str = parsed.get("severity", "low").lower()
+        confidence = float(parsed.get("confidence", 0.7))
+        llm_patterns = parsed.get("patterns", [])
+        recommendations = parsed.get("recommendations", [])
+
+        try:
+            severity = Severity(severity_str)
+        except ValueError:
+            severity = determine_severity(log, full_response, anomalies)
+
+        follow_ups = []
+        for rec in recommendations[:3]:
+            try:
+                priority_str = rec.get("priority", "low").lower()
+                try:
+                    priority = Severity(priority_str)
+                except ValueError:
+                    priority = Severity.LOW
+                follow_ups.append({
+                    "id": f"followup-{len(follow_ups)}",
+                    "title": rec.get("title", "Follow-up action"),
+                    "description": rec.get("description", ""),
+                    "priority": priority.value,
+                    "type": rec.get("type", "investigation"),
+                    "status": "pending",
+                    "createdAt": log.timestamp
+                })
+            except Exception:
+                continue
+
+        all_patterns = list(set(patterns + llm_patterns))
 
         yield format_sse_event({
             "type": "analysis",
@@ -122,10 +166,10 @@ async def stream_response(
                 "summary": summary,
                 "rootCause": root_cause,
                 "severity": severity.value,
-                "confidence": min(len(summary) / 100, 0.95),
-                "patterns": patterns,
+                "confidence": confidence,
+                "patterns": all_patterns,
                 "relatedLogs": [],
-                "followUps": [],
+                "followUps": follow_ups,
                 "anomalyScore": max([a.score for a in anomalies] or [0]),
                 "modelVersion": config.groq_model,
                 "status": "completed"

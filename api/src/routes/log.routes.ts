@@ -20,20 +20,15 @@ const router = Router();
 router.post("/", ingestLog);
 router.get("/", getLogs);
 router.get("/live", streamLogs);
-router.get("/:id", getLogById);
-
-router.get("/:id/analysis", getLogAnalysis);
-
-router.get("/:id/analyze-stream", streamAnalysis);
-
-router.post("/:id/analyze", triggerAnalysis);
 
 router.get("/analysis/pending", getPendingLogs);
-
 router.post("/analysis", storeAnalysis);
-
 router.get("/analysis/stats", getAnalysisStats);
-
 router.get("/analysis/critical", getCriticalAnalyses);
+
+router.get("/:id", getLogById);
+router.get("/:id/analysis", getLogAnalysis);
+router.get("/:id/analyze-stream", streamAnalysis);
+router.post("/:id/analyze", triggerAnalysis);
 
 export default router;
