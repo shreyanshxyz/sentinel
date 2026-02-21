@@ -219,34 +219,11 @@ class APIClient {
     byLevel: Record<string, number>;
     bySource: Record<string, number>;
   }> {
-    const logs = await this.getLogs({
-      startTime: this.getStartTimeForRange(timeRange),
-    });
-
-    const byLevel: Record<string, number> = {};
-    const bySource: Record<string, number> = {};
-
-    logs.forEach((log) => {
-      byLevel[log.level] = (byLevel[log.level] || 0) + 1;
-      bySource[log.source] = (bySource[log.source] || 0) + 1;
-    });
-
-    return {
-      total: logs.length,
-      byLevel,
-      bySource,
-    };
-  }
-
-  private getStartTimeForRange(range: string): string {
-    const now = new Date();
-    const hours = parseInt(range);
-
-    if (!isNaN(hours)) {
-      return new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString();
-    }
-
-    return new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    return this.get<{
+      total: number;
+      byLevel: Record<string, number>;
+      bySource: Record<string, number>;
+    }>("/analytics", { range: timeRange });
   }
 }
 
