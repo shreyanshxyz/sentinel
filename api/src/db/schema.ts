@@ -1,6 +1,5 @@
 import {
   pgTable,
-  uuid,
   timestamp,
   varchar,
   text,
@@ -28,7 +27,7 @@ export type SourceStatus = (typeof sourceStatuses)[number];
 export const logs = pgTable(
   "logs",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: varchar("id", { length: 255 }).primaryKey(),
     timestamp: timestamp("timestamp", { withTimezone: true, mode: "string" }).notNull(),
     level: varchar("level", { length: 10 }).$type<LogLevel>().notNull(),
     message: text("message").notNull(),
@@ -49,8 +48,8 @@ export const logs = pgTable(
 export const aiAnalyses = pgTable(
   "ai_analyses",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    logId: uuid("log_id")
+    id: varchar("id", { length: 255 }).primaryKey(),
+    logId: varchar("log_id", { length: 255 })
       .notNull()
       .references(() => logs.id, { onDelete: "cascade" }),
     summary: text("summary").notNull(),
