@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: sentinel-api
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8000
+      - key: DATABASE_HOST
+        fromDatabase:
+          name: sentinel-db
+          property: host
+      - key: DATABASE_PORT
+        value: 5432
+      - key: DATABASE_NAME
+        fromDatabase:
+          name: sentinel-db
+          property: database
+      - key: DATABASE_USER
+        fromDatabase:
+          name: sentinel-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: sentinel-db
+          property: password
+      - key: DATABASE_SSL
+        value: true
+      - key: CORS_ORIGINS
+        value: https://your-app.vercel.app
+
+databases:
+  - name: sentinel-db
+    region: oregon
+    plan: free
