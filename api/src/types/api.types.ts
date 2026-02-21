@@ -21,10 +21,21 @@ export interface ResponseMeta {
   hasPrev?: boolean;
   totalPages?: number;
   message?: string;
+  start?: string;
+  end?: string;
+  interval?: string;
 }
 
 export interface PaginatedResponse<T> extends ApiResponse<T[]> {
-  meta: Required<ResponseMeta>;
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+    totalPages: number;
+    message?: string;
+  };
 }
 
 export interface SearchResponse extends PaginatedResponse<LogEntry> {
@@ -45,9 +56,14 @@ export interface HealthResponse {
   status: "healthy" | "degraded" | "unhealthy";
   version: string;
   uptime: number;
+  database: {
+    connected: boolean;
+    latency?: number;
+  };
   sources: {
     total: number;
     active: number;
+    inactive: number;
     errors: number;
   };
   metrics: {

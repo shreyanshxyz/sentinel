@@ -14,14 +14,14 @@ import {
   logIdSchema,
 } from "../validation/log.schema.js";
 
-export const ingestLog = (
+export const ingestLog = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const input = createLogSchema.parse(req.body);
-    const log = logService.create(input);
+    const log = await logService.create(input);
 
     streamService.broadcastLog(log);
 
@@ -36,11 +36,11 @@ export const ingestLog = (
   }
 };
 
-export const getLogs = (
+export const getLogs = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const query = logQuerySchema.parse(req.query);
 
@@ -54,7 +54,7 @@ export const getLogs = (
       : undefined;
     const sources = query.sources ? query.sources.split(",") : undefined;
 
-    const result = logService.search({
+    const result = await logService.search({
       query: query.query,
       levels,
       sources,
@@ -86,14 +86,14 @@ export const getLogs = (
   }
 };
 
-export const getLogById = (
+export const getLogById = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const { id } = logIdSchema.parse(req.params);
-    const log = logService.getById(id);
+    const log = await logService.getById(id);
 
     if (!log) {
       throw new ApiException("NOT_FOUND", `Log with id '${id}' not found`, 404);
@@ -111,20 +111,20 @@ export const getLogById = (
 };
 
 export const streamLogs = (
-  req: Request,
+  _req: Request,
   res: Response,
   _next: NextFunction,
 ): void => {
   streamService.addClient(res);
 };
 
-export const getSources = (
+export const getSources = async (
   _req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
-    const sources = logService.getSources();
+    const sources = await logService.getSources();
     const response: ApiResponse<{
       id: string;
       name: string;
