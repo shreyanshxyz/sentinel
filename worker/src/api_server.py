@@ -22,7 +22,12 @@ try:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://localhost:8000"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:8000",
+            "https://sentinel-one-beta.vercel.app",
+            "https://sentinel-tb6f.onrender.com",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

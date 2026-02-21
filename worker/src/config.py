@@ -37,6 +37,19 @@ class Config(BaseSettings):
         default=120,
         description="LLM request timeout in seconds",
     )
+    
+    groq_api_key: str = Field(
+        default="",
+        description="Groq API key for LLM inference (alternative to Ollama)",
+    )
+    groq_model: str = Field(
+        default="llama-3.1-70b-versatile",
+        description="Groq model to use for analysis",
+    )
+    use_groq: bool = Field(
+        default=True,
+        description="Use Groq API instead of Ollama",
+    )
     ollama_temperature: float = Field(
         default=0.1,
         description="Temperature for LLM generation (0.0 = deterministic, 1.0 = creative)",
