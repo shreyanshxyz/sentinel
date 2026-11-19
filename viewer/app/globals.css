@@ -1,120 +1,196 @@
 @import "tailwindcss";
 
 :root {
-  --terminal-bg: #0a0a0a;
-  --terminal-fg: #00ff00;
-  --terminal-cursor: #00ff00;
-  --log-debug: #6b7280;
-  --log-info: #06b6d4;
-  --log-warn: #f59e0b;
-  --log-error: #ef4444;
-  --log-fatal: #dc2626;
-  --terminal-border: #1f2937;
-  --terminal-input: #111827;
-  --terminal-accent: #10b981;
-  --terminal-muted: #4b5563;
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #111827;
-  --bg-tertiary: #1f2937;
-  --text-primary: #e5e7eb;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  color-scheme: light;
+
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --sunken: #fafafa;
+  --line: #e8e8e8;
+  --line-strong: #d6d6d6;
+  --ink: #171717;
+  --ink-2: #3d3d3d;
+  --muted: #6b6b6b;
+  --faint: #969696;
+  --hover: #f7f7f7;
+  --selected: #f4f4f4;
+  --accent: #0b5fff;
+  --primary: #171717;
+  --on-primary: #ffffff;
+
+  --debug: #7a7a7a;
+  --info: #1f6fcc;
+  --warn: #a65a00;
+  --error: #d22f3a;
+  --fatal: #a3001b;
+  --ok: #0f7b4f;
+
+  --hist: #dcdcdc;
+  --hist-warn: #e7c48e;
+  --hist-err: #e39a9a;
+
+  --log-size: 11.5px;
+  --log-meta: 10.5px;
+  --log-leading: 1.4;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #0b0c0e;
+  --surface: #111215;
+  --sunken: #0e0f11;
+  --line: #25272c;
+  --line-strong: #34373d;
+  --ink: #e8e9eb;
+  --ink-2: #c9cbd0;
+  --muted: #9a9ca2;
+  --faint: #6e7177;
+  --hover: #17181c;
+  --selected: #1b1d21;
+  --accent: #6ea2ff;
+  --primary: #e8e9eb;
+  --on-primary: #0b0c0e;
+
+  --debug: #8e9197;
+  --info: #6ea2ff;
+  --warn: #e0a23c;
+  --error: #ff6b6b;
+  --fatal: #ff4d6a;
+  --ok: #4cc38a;
+
+  --hist: #2c2f35;
+  --hist-warn: #6b5328;
+  --hist-err: #713236;
 }
 
 @theme inline {
-  --color-terminal-bg: var(--terminal-bg);
-  --color-terminal-fg: var(--terminal-fg);
-  --color-log-debug: var(--log-debug);
-  --color-log-info: var(--log-info);
-  --color-log-warn: var(--log-warn);
-  --color-log-error: var(--log-error);
-  --color-log-fatal: var(--log-fatal);
-  --color-terminal-border: var(--terminal-border);
-  --color-terminal-input: var(--terminal-input);
-  --color-terminal-accent: var(--terminal-accent);
-  --color-terminal-muted: var(--terminal-muted);
-  --color-bg-primary: var(--bg-primary);
-  --color-bg-secondary: var(--bg-secondary);
-  --color-bg-tertiary: var(--bg-tertiary);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-muted: var(--text-muted);
-  --font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
-  --font-terminal: "JetBrains Mono", monospace;
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-hover: var(--hover);
+  --color-selected: var(--selected);
+  --color-accent: var(--accent);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-debug: var(--debug);
+  --color-info: var(--info);
+  --color-warn: var(--warn);
+  --color-error: var(--error);
+  --color-fatal: var(--fatal);
+  --color-ok: var(--ok);
+  --color-hist: var(--hist);
+  --color-hist-warn: var(--hist-warn);
+  --color-hist-err: var(--hist-err);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, Consolas,
+    monospace;
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--ink);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-strong);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--faint);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
-html {
-  scroll-behavior: smooth;
+@layer components {
+  .log-text {
+    font-size: var(--log-size);
+    line-height: var(--log-leading);
+  }
+
+  .log-meta {
+    font-size: var(--log-meta);
+    line-height: var(--log-leading);
+  }
 }
 
-body {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: var(--font-terminal);
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--terminal-border);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--terminal-muted);
-}
-
-::selection {
-  background: var(--terminal-accent);
-  color: var(--bg-primary);
-}
-
-:focus-visible {
-  outline: 2px solid var(--terminal-accent);
-  outline-offset: 2px;
-}
-
-@keyframes terminal-cursor {
+@keyframes live-pulse {
   0%,
-  50% {
+  100% {
     opacity: 1;
   }
-  51%,
-  100% {
-    opacity: 0;
+  50% {
+    opacity: 0.35;
   }
 }
 
-.terminal-cursor {
-  animation: terminal-cursor 1s infinite;
+.live-dot {
+  animation: live-pulse 2s ease-in-out infinite;
 }
 
-@keyframes typing {
-  from {
-    width: 0;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-  to {
-    width: 100%;
-  }
-}
-
-.typing-animation {
-  overflow: hidden;
-  white-space: nowrap;
-  animation: typing 2s steps(40, end);
 }
