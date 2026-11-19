@@ -12,6 +12,20 @@ Sentinel is a production-ready log aggregation platform with real-time AI-powere
 
 ## Screenshots
 
+### Landing page
+
+The marketing site at `/` explains the product, streams a live tail, and hands you a curl command to try it.
+
+![Sentinel landing page](screenshots/landing/1440-light.png)
+
+| Dark theme | Mobile |
+|:----------:|:------:|
+| ![Landing page in dark theme](screenshots/landing/1440-dark.png) | ![Landing page on mobile](screenshots/landing/390-light.png) |
+
+### Dashboard
+
+The dashboard at `/dashboard` is the working surface: a live feed, search, analytics, and per-event analysis.
+
 | Log Dashboard | AI Analysis |
 |:-------------:|:-----------:|
 | ![Log Dashboard](screenshots/log-dashboard.png) | ![AI Analysis](screenshots/ai-analysis.png) |
@@ -119,7 +133,9 @@ cd viewer && npm run dev
 cd worker && python -m src.main
 ```
 
-The viewer will be available at `http://localhost:3000` and the API at `http://localhost:8000`.
+The viewer will be available at `http://localhost:3000` (marketing page at `/`, dashboard at `/dashboard`) and the API at `http://localhost:8000`.
+
+Set `DEMO_SEED=true` on the API to stream a steady trickle of demo events, so the dashboard has something to show without sending traffic yourself.
 
 > 💡 **Live Demo**: The application is deployed at [sentinel-one-beta.vercel.app](https://sentinel-one-beta.vercel.app). Note that the Render backend may take 30-60 seconds to wake up on first load.
 
@@ -174,6 +190,8 @@ GET /api/logs/analysis/stats        # Analysis statistics
 | `NODE_ENV`                  | development | Runtime environment      |
 | `MAX_LOGS_IN_MEMORY`        | 10000       | Log retention limit      |
 | `SSE_HEARTBEAT_INTERVAL_MS` | 30000       | Keep-alive ping interval |
+| `DEMO_SEED`                 | false       | Stream seeded demo logs  |
+| `DEMO_SEED_INTERVAL_MS`     | 60000       | Delay between demo seeds |
 
 ### Worker Environment Variables
 
