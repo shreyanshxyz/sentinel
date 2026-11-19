@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { LogEntry } from "@/types/log";
-
-const SSE_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+import { getApiBaseUrl } from "@/lib/settings";
 
 interface UseLogStreamOptions {
   onLog?: (log: LogEntry) => void;
@@ -44,6 +42,7 @@ export function useLogStream(
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const logTimestampsRef = useRef<number[]>([]);
   const metricsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const connectRef = useRef<(() => void) | null>(null);
 
   const calculateLogsPerSecond = useCallback(() => {
     const now = Date.now();
@@ -64,7 +63,7 @@ export function useLogStream(
     try {
       setError(null);
 
-      const url = `${SSE_BASE_URL}/logs/live`;
+      const url = `${getApiBaseUrl()}/logs/live`;
       const eventSource = new EventSource(url);
       eventSourceRef.current = eventSource;
 
@@ -109,7 +108,7 @@ export function useLogStream(
           );
 
           reconnectTimerRef.current = setTimeout(() => {
-            connect();
+            connectRef.current?.();
           }, reconnectInterval);
         } else {
           setError(new Error("Max reconnection attempts reached"));
@@ -149,6 +148,10 @@ export function useLogStream(
   }, [onDisconnect]);
 
   useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
+
+  useEffect(() => {
     metricsIntervalRef.current = setInterval(calculateLogsPerSecond, 1000);
 
     return () => {
@@ -178,21 +181,6 @@ export function useLogBuffer(maxSize: number = 1000) {
   const bufferRef = useRef<LogEntry[]>([]);
   const flushTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const addLog = useCallback(
-    (log: LogEntry) => {
-      bufferRef.current.push(log);
-
-      if (bufferRef.current.length > maxSize * 2) {
-        bufferRef.current = bufferRef.current.slice(-maxSize);
-      }
-
-      if (bufferRef.current.length >= 50) {
-        flush();
-      }
-    },
-    [maxSize],
-  );
-
   const flush = useCallback(() => {
     if (bufferRef.current.length === 0) return;
 
@@ -206,6 +194,21 @@ export function useLogBuffer(maxSize: number = 1000) {
 
     bufferRef.current = [];
   }, [maxSize]);
+
+  const addLog = useCallback(
+    (log: LogEntry) => {
+      bufferRef.current.push(log);
+
+      if (bufferRef.current.length > maxSize * 2) {
+        bufferRef.current = bufferRef.current.slice(-maxSize);
+      }
+
+      if (bufferRef.current.length >= 50) {
+        flush();
+      }
+    },
+    [maxSize, flush],
+  );
 
   const clear = useCallback(() => {
     setLogs([]);
