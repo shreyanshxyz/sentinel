@@ -1,29 +1,22 @@
 "use client";
 
-import { useRef, useSyncExternalStore } from "react";
+import { useRef } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { setTheme, subscribeTheme, themeSnapshot } from "@/lib/theme";
-import { MoonIcon, SearchIcon, SunIcon } from "@/components/ui/icons";
+import { SearchIcon } from "@/components/ui/icons";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export function TopBar() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const resolvedTheme = useSyncExternalStore(
-    subscribeTheme,
-    themeSnapshot,
-    () => "light" as const,
-  );
-
-  const toggleTheme = () => {
-    setTheme(resolvedTheme === "dark" ? "light" : "dark");
-  };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const value = inputRef.current?.value.trim() ?? "";
-    router.push(value ? `/search?q=${encodeURIComponent(value)}` : "/search");
+    router.push(
+      value ? `/dashboard/search?q=${encodeURIComponent(value)}` : "/dashboard/search",
+    );
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -54,19 +47,7 @@ export function TopBar() {
       </form>
 
       <div className="ml-auto flex items-center gap-2.5">
-        <button
-          type="button"
-          onClick={toggleTheme}
-          aria-label="Toggle theme"
-          title="Toggle theme"
-          className="flex h-[27px] w-[27px] items-center justify-center rounded-[5px] border border-transparent text-muted transition-colors duration-150 hover:bg-hover hover:text-ink"
-        >
-          {resolvedTheme === "dark" ? (
-            <SunIcon className="h-4 w-4" />
-          ) : (
-            <MoonIcon className="h-4 w-4" />
-          )}
-        </button>
+        <ThemeToggle />
       </div>
     </header>
   );
