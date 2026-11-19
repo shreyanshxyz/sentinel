@@ -9,6 +9,7 @@ import {
 import { requestLogger } from "./middleware/logger.middleware.js";
 import { appConfig } from "./config/index.js";
 import { streamService } from "./services/stream.service.js";
+import { demoSeeder } from "./services/demo-seeder.service.js";
 import { logger } from "./utils/logger.js";
 
 const app = express();
@@ -47,14 +48,20 @@ app.use(errorHandler);
 
 streamService.start();
 
+if (appConfig.demo.seed) {
+  void demoSeeder.start();
+}
+
 process.on("SIGTERM", () => {
   logger.info("SIGTERM received, shutting down gracefully");
+  demoSeeder.stop();
   streamService.stop();
   process.exit(0);
 });
 
 process.on("SIGINT", () => {
   logger.info("SIGINT received, shutting down gracefully");
+  demoSeeder.stop();
   streamService.stop();
   process.exit(0);
 });
