@@ -4,10 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { JSX } from "react";
 import { cn } from "@/lib/utils";
-import { APP_VERSION } from "@/lib/version";
 import {
   BarsIcon,
-  GearIcon,
+  SlidersIcon,
   PulseIcon,
   SearchIcon,
 } from "@/components/ui/icons";
@@ -38,7 +37,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: "Manage",
-    items: [{ label: "Settings", href: "/settings", icon: GearIcon }],
+    items: [{ label: "Settings", href: "/settings", icon: SlidersIcon }],
   },
 ];
 
@@ -89,18 +88,18 @@ export function NavRail({
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex h-7 shrink-0 items-center gap-2 rounded-[5px] px-2 text-[12.5px] leading-none whitespace-nowrap transition-colors duration-150",
+                "flex h-7 shrink-0 items-center gap-2 rounded-[5px] px-2.5 text-[12.5px] leading-none whitespace-nowrap transition-colors duration-150",
                 active
                   ? "bg-selected font-[550] text-ink"
                   : "text-muted hover:bg-hover hover:text-ink",
               )}
             >
-              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <Icon className="h-[15px] w-[15px] shrink-0" />
               {item.label}
             </Link>
           );
         })}
-        <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-2 text-[10.5px] text-muted">
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 pr-2.5 pl-2 text-[10.5px] text-muted">
           <span className={cn("h-1.5 w-1.5 rounded-full", health.dot)} />
           {health.label}
         </span>
@@ -112,14 +111,14 @@ export function NavRail({
     <nav
       aria-label="Primary"
       className={cn(
-        "hidden w-52 shrink-0 flex-col border-r border-line bg-canvas px-2.5 pt-3.5 pb-2.5 lg:flex",
+        "hidden w-52 shrink-0 flex-col border-r border-line bg-canvas px-2.5 pt-[18px] pb-2 lg:flex",
         className,
       )}
     >
       <div className="flex flex-col gap-3">
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
-            <div className="flex h-[26px] items-center px-2 text-[9.5px] font-semibold tracking-[.09em] text-faint uppercase">
+            <div className="flex h-6 items-center px-2.5 text-[9.5px] font-semibold tracking-[.09em] text-faint uppercase">
               {group.label}
             </div>
             <div className="flex flex-col gap-px">
@@ -132,13 +131,13 @@ export function NavRail({
                     href={item.href}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "flex h-7 items-center gap-2 rounded-[5px] px-2 text-[12.5px] leading-none transition-colors duration-150",
+                      "flex h-[30px] items-center gap-2 rounded-[5px] px-2.5 text-[12.5px] leading-none transition-colors duration-150",
                       active
                         ? "bg-selected font-[550] text-ink"
                         : "text-muted hover:bg-hover hover:text-ink",
                     )}
                   >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <Icon className="h-[15px] w-[15px] shrink-0" />
                     {item.label}
                   </Link>
                 );
@@ -148,13 +147,12 @@ export function NavRail({
         ))}
       </div>
 
-      <div className="mt-auto border-t border-line pt-3">
-        <div className="flex items-center gap-1.5 px-2 text-[10.5px] text-muted">
-          <span className={cn("h-1.5 w-1.5 rounded-full", health.dot)} />
+      <div className="mt-auto -mx-2.5 border-t border-line px-5 pt-2 pb-0.5">
+        <div className="flex h-[30px] items-center gap-2 text-[11.5px] text-muted">
+          <span
+            className={cn("h-1.5 w-1.5 shrink-0 rounded-full", health.dot)}
+          />
           {health.label}
-        </div>
-        <div className="mt-1.5 px-2 font-mono text-[9.5px] text-faint">
-          sentinel v{APP_VERSION}
         </div>
       </div>
     </nav>
