@@ -370,7 +370,7 @@ export default function SettingsPage() {
       <PageHead title="Settings" subtitle="Preferences for this browser" />
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-[180px] shrink-0 overflow-y-auto border-r border-line px-2 py-3">
+        <aside className="w-[180px] shrink-0 overflow-y-auto border-r border-line px-2.5 py-3">
           <nav aria-label="Settings sections" className="space-y-0.5">
             {SECTIONS.map((item) => {
               const active = item.id === section;
@@ -381,7 +381,7 @@ export default function SettingsPage() {
                   aria-current={active ? "page" : undefined}
                   onClick={() => setSection(item.id)}
                   className={cn(
-                    "flex h-7 w-full cursor-pointer items-center rounded-[5px] px-2 text-left text-[12px] transition-colors duration-150",
+                    "flex h-7 w-full cursor-pointer items-center rounded-[5px] px-2.5 text-left text-[12px] transition-colors duration-150",
                     active
                       ? "bg-selected font-[550] text-ink"
                       : "text-muted hover:bg-hover hover:text-ink",
