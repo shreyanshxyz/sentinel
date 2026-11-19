@@ -26,18 +26,18 @@ interface NavItem {
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Monitor",
-    items: [{ label: "Live feed", href: "/", icon: PulseIcon }],
+    items: [{ label: "Live feed", href: "/dashboard", icon: PulseIcon }],
   },
   {
     label: "Analyze",
     items: [
-      { label: "Search", href: "/search", icon: SearchIcon },
-      { label: "Analytics", href: "/analytics", icon: BarsIcon },
+      { label: "Search", href: "/dashboard/search", icon: SearchIcon },
+      { label: "Analytics", href: "/dashboard/analytics", icon: BarsIcon },
     ],
   },
   {
     label: "Manage",
-    items: [{ label: "Settings", href: "/settings", icon: SlidersIcon }],
+    items: [{ label: "Settings", href: "/dashboard/settings", icon: SlidersIcon }],
   },
 ];
 
@@ -52,7 +52,9 @@ const HEALTH: Record<
 };
 
 function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+  if (href === "/dashboard") {
+    return pathname === "/dashboard" || pathname.startsWith("/dashboard/logs");
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
