@@ -42,7 +42,7 @@ export function LogDetailHeader({
     >
       <div className="min-w-0">
         <Link
-          href="/"
+          href="/dashboard"
           className="inline-flex items-center gap-1 text-[11.5px] text-muted transition-colors duration-150 hover:text-ink"
         >
           <ArrowLeftIcon className="h-3 w-3" />
