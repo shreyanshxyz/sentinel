@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../ui/Card";
-import { Badge } from "../../ui/Badge";
-import { Spinner } from "../../ui/Spinner";
-import { cn } from "../../../lib/utils";
+import { useEffect, useRef, useState, useCallback } from "react";
+import type { ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
+import { StatusChip } from "@/components/ui/StatusChip";
+import { Tag } from "@/components/ui/Tag";
+import { getApiBaseUrl } from "@/lib/settings";
+import { cn } from "@/lib/utils";
 import { AIInsight } from "@/types/log";
 
 export interface StreamingAnalysisProps {
@@ -26,10 +29,44 @@ interface StreamingState {
   }>;
 }
 
-export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
+interface FollowUp {
+  title: string;
+  description: string;
+  priority: string;
+}
+
+const PRIORITY_COLOR: Record<string, string> = {
+  low: "text-muted",
+  medium: "text-warn",
+  high: "text-error",
+  critical: "text-fatal",
+};
+
+function priorityClass(priority: string): string {
+  return PRIORITY_COLOR[priority.toLowerCase()] ?? "text-muted";
+}
+
+function Section({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <h3 className="text-[10px] font-semibold tracking-[.08em] text-faint uppercase">
+        {label}
+      </h3>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+export function StreamingAnalysis({
   logId,
   error: errorProp,
-}) => {
+}: StreamingAnalysisProps) {
   const [streaming, setStreaming] = useState(true);
   const [streamingState, setStreamingState] = useState<StreamingState>({
     summary: "",
@@ -73,25 +110,8 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     return state;
   };
 
-  const getSeverityColor = (severity: string) => {
-    const colors: Record<string, string> = {
-      low: "text-log-info border-log-info/40",
-      medium: "text-log-warn border-log-warn/40",
-      high: "text-log-error border-log-error/40",
-      critical: "text-log-fatal border-log-fatal/40",
-    };
-    return colors[severity] || "text-terminal-muted border-terminal-border";
-  };
-
   const rawContentRef = useRef<string>("");
-
-  const handleRetry = useCallback(() => {
-    retryCountRef.current = 0;
-    setError(null);
-    if (isMountedRef.current) {
-      startStreaming();
-    }
-  }, []);
+  const startStreamingRef = useRef<(() => void) | null>(null);
 
   const startStreaming = useCallback(() => {
     if (!logId || !isMountedRef.current) return;
@@ -113,8 +133,9 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     setAnalysis(null);
     setError(null);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
-    const eventSource = new EventSource(`${apiUrl}/logs/${logId}/analyze-stream`);
+    const eventSource = new EventSource(
+      `${getApiBaseUrl()}/logs/${logId}/analyze-stream`,
+    );
 
     eventSourceRef.current = eventSource;
 
@@ -124,13 +145,16 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
 
     eventSource.onmessage = (event) => {
       if (!isMountedRef.current) return;
-      
+
       try {
         const data = JSON.parse(event.data);
 
         switch (data.type) {
           case "start":
-            console.log("[StreamingAnalysis] Analysis started for log:", data.logId);
+            console.log(
+              "[StreamingAnalysis] Analysis started for log:",
+              data.logId,
+            );
             break;
 
           case "chunk":
@@ -166,7 +190,7 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
         retryCountRef.current += 1;
         setTimeout(() => {
           if (isMountedRef.current) {
-            startStreaming();
+            startStreamingRef.current?.();
           }
         }, 2000);
       } else if (isMountedRef.current) {
@@ -176,11 +200,26 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     };
   }, [logId]);
 
+  const handleRetry = useCallback(() => {
+    retryCountRef.current = 0;
+    setError(null);
+    if (isMountedRef.current) {
+      startStreaming();
+    }
+  }, [startStreaming]);
+
   useEffect(() => {
     isMountedRef.current = true;
-    
+    startStreamingRef.current = startStreaming;
+
     if (logId) {
-      startStreaming();
+      // Kick the stream off after the effect body so the connection setup
+      // does not cascade renders during the commit phase.
+      queueMicrotask(() => {
+        if (isMountedRef.current) {
+          startStreamingRef.current?.();
+        }
+      });
     }
 
     return () => {
@@ -191,295 +230,154 @@ export const StreamingAnalysis: React.FC<StreamingAnalysisProps> = ({
     };
   }, [logId, startStreaming]);
 
-  if (errorProp || error) {
-    return (
-      <div className="min-h-100 flex items-center justify-center">
-        <div className="flex flex-col items-center justify-center space-y-4 p-4">
-          <div className="text-log-error text-center space-y-2">
-            <p className="text-sm font-mono">Analysis failed to connect</p>
-            <p className="text-xs text-terminal-muted">
-              {errorProp || error || "Unknown error occurred"}
+  const failure = errorProp || error;
+  const confidence = analysis?.confidence ?? streamingState.confidence;
+  const patterns = analysis?.patterns ?? streamingState.patterns;
+  const followUps: FollowUp[] = analysis
+    ? analysis.followUps.map((item) => ({
+        title: item.title,
+        description: item.description,
+        priority: item.priority,
+      }))
+    : streamingState.recommendations;
+  const summary = analysis?.summary ?? streamingState.summary;
+  const rootCause = analysis?.rootCause ?? streamingState.rootCause;
+  const isConnecting = streaming && !summary && !rootCause && !failure;
+
+  const stateLabel = failure ? "Failed" : streaming ? "Streaming" : "Complete";
+  const stateTone = failure ? "error" : streaming ? "live" : "paused";
+  const generatedAt = analysis?.createdAt ? new Date(analysis.createdAt) : null;
+  const generatedLabel =
+    generatedAt && !Number.isNaN(generatedAt.getTime())
+      ? generatedAt.toLocaleTimeString("en-US", { hour12: false })
+      : null;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2.5">
+        <h2 className="text-[11px] font-semibold text-ink">AI analysis</h2>
+        <StatusChip tone={stateTone}>{stateLabel}</StatusChip>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {failure ? (
+          <div className="flex flex-col items-start gap-2">
+            <p className="text-[12px] font-medium text-ink">
+              Analysis unavailable
             </p>
+            <p className="text-[11.5px] leading-[1.5] text-muted">
+              {failure || "Unknown error occurred"}
+            </p>
+            <Button
+              variant="primary"
+              size="md"
+              className="mt-1.5"
+              onClick={handleRetry}
+            >
+              Retry
+            </Button>
           </div>
-          <button
-            onClick={handleRetry}
-            className="px-4 py-2 bg-terminal-accent text-black rounded hover:bg-green-600 transition-colors font-mono text-sm"
-          >
-            Retry Analysis
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (streaming && !streamingState.summary && !analysis) {
-    return (
-      <div className="min-h-100 flex items-center justify-center">
-        <div className="flex flex-col items-center justify-center space-y-4">
-          <Spinner variant="blocks" size="lg" text="CONNECTING..." />
-          <p className="text-terminal-muted text-sm font-mono">
-            Connecting to AI Worker...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (streaming) {
-    return (
-      <Card variant="default" padding="lg" className="min-h-100 flex flex-col">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <span className="text-purple-400">[</span>
-              <span className="text-terminal-muted uppercase tracking-wider text-xs">
-                AI Analysis
-              </span>
-              <span className="text-purple-400">]</span>
-            </CardTitle>
-            <Badge variant="outline" className="text-xs font-mono animate-pulse">
-              LIVE STREAMING
-            </Badge>
+        ) : isConnecting ? (
+          <div className="flex items-center gap-2 text-[11.5px] text-muted">
+            <Spinner size="sm" />
+            Connecting to analysis…
           </div>
-        </CardHeader>
-
-        <CardContent className="flex-1 overflow-y-auto p-4 space-y-6">
-          {streamingState.confidence > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-                <span className="text-purple-400">[</span>
-                <span>Confidence</span>
-                <span className="text-purple-400">]</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 bg-terminal-input rounded-full overflow-hidden">
+        ) : (
+          <div className="space-y-5">
+            {confidence > 0 ? (
+              <div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[10px] font-semibold tracking-[.08em] text-faint uppercase">
+                    Confidence
+                  </span>
+                  <span className="font-mono text-[10.5px] text-ink-2 tabular-nums">
+                    {Math.round(confidence * 100)}%
+                  </span>
+                </div>
+                <div className="mt-1.5 h-[2px] bg-sunken">
                   <div
-                    className="h-full transition-all duration-300 bg-green-500"
-                    style={{ width: `${Math.round(streamingState.confidence * 100)}%` }}
+                    className="h-full bg-ink transition-all duration-300"
+                    style={{ width: `${Math.round(confidence * 100)}%` }}
                   />
                 </div>
-                <span className="text-xs font-mono text-terminal-muted">
-                  {Math.round(streamingState.confidence * 100)}%
-                </span>
               </div>
-            </div>
-          )}
+            ) : null}
 
-          {streamingState.summary && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-                <span className="text-purple-400">[</span>
-                <span>Summary</span>
-                <span className="text-purple-400">]</span>
-              </div>
-              <div className="pl-3 border-l border-purple-400/30">
-                <p className="text-sm text-text-primary font-mono leading-relaxed">
-                  {streamingState.summary}
-                  <span className="terminal-cursor ml-1">█</span>
+            {summary ? (
+              <Section label="Summary">
+                <p className="text-[12px] leading-[1.55] text-ink-2">
+                  {summary}
+                  {streaming ? (
+                    <span
+                      aria-hidden
+                      className="ml-0.5 inline-block h-[10px] w-[2px] translate-y-[1px] bg-ok"
+                    />
+                  ) : null}
                 </p>
-              </div>
-            </div>
-          )}
+              </Section>
+            ) : null}
 
-          {streamingState.rootCause && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-                <span className="text-purple-400">[</span>
-                <span>Root Cause</span>
-                <span className="text-purple-400">]</span>
-              </div>
-              <div className="pl-3 border-l border-purple-400/30">
-                <div className="bg-terminal-input/50 p-3 border border-purple-400/20 rounded">
-                  <p className="text-sm text-text-primary font-mono leading-relaxed">
-                    {streamingState.rootCause}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {streamingState.patterns.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-                <span className="text-purple-400">[</span>
-                <span>Patterns</span>
-                <span className="text-purple-400">]</span>
-              </div>
-              <div className="flex flex-wrap gap-2 pl-3">
-                {streamingState.patterns.map((pattern, i) => (
-                  <Badge key={i} variant="outline" className="text-xs font-mono text-purple-400 border-purple-400/40">
-                    {pattern}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {streamingState.recommendations.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-                <span className="text-purple-400">[</span>
-                <span>Suggested Follow-ups</span>
-                <span className="text-purple-400">]</span>
-              </div>
-              <div className="space-y-2 pl-3 border-l border-purple-400/30">
-                {streamingState.recommendations.map((rec, i) => (
-                  <div
-                    key={i}
-                    className="bg-terminal-input/30 p-3 border border-terminal-border rounded"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className="text-xs font-mono text-terminal-muted uppercase tracking-wider">
-                          {rec.title}
-                        </p>
-                        <p className="text-sm text-text-primary font-mono leading-relaxed mt-1">
-                          {rec.description}
-                        </p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={cn("text-xs font-mono", getSeverityColor(rec.priority))}
-                      >
-                        {rec.priority.toUpperCase()}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!streamingState.summary && !streamingState.rootCause && (
-            <div className="flex items-center justify-center py-8">
-              <Spinner variant="dots" size="md" text="Analyzing..." />
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (analysis) {
-    return (
-      <Card variant="default" padding="lg" className="min-h-100">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <span className="text-purple-400">[</span>
-              <span className="text-terminal-muted uppercase tracking-wider text-xs">
-                AI Analysis
-              </span>
-              <span className="text-purple-400">]</span>
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              {analysis.modelVersion && (
-                <Badge variant="outline" className="text-xs font-mono text-terminal-muted">
-                  {analysis.modelVersion}
-                </Badge>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="flex-1 overflow-y-auto p-4 space-y-6">
-          {analysis.confidence !== undefined && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-                <span className="text-purple-400">[</span>
-                <span>Confidence</span>
-                <span className="text-purple-400">]</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 bg-terminal-input rounded-full overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-full transition-all duration-300",
-                      analysis.confidence >= 0.7 ? "bg-green-500" : "bg-yellow-500"
-                    )}
-                    style={{ width: `${Math.round(analysis.confidence * 100)}%` }}
-                  />
-                </div>
-                <span className="text-xs font-mono text-terminal-muted">
-                  {Math.round(analysis.confidence * 100)}%
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-              <span className="text-purple-400">[</span>
-              <span>Summary</span>
-              <span className="text-purple-400">]</span>
-            </div>
-            <div className="pl-3 border-l border-purple-400/30">
-              <p className="text-sm text-text-primary font-mono leading-relaxed">
-                {analysis.summary}
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-              <span className="text-purple-400">[</span>
-              <span>Root Cause</span>
-              <span className="text-purple-400">]</span>
-            </div>
-            <div className="pl-3 border-l border-purple-400/30">
-              <div className="bg-terminal-input/50 p-3 border border-purple-400/20 rounded">
-                <p className="text-sm text-text-primary font-mono leading-relaxed">
-                  {analysis.rootCause}
+            {rootCause ? (
+              <Section label="Root cause">
+                <p className="text-[12px] leading-[1.55] text-ink-2">
+                  {rootCause}
                 </p>
-              </div>
-            </div>
-          </div>
+              </Section>
+            ) : null}
 
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-              <span className="text-purple-400">[</span>
-              <span>Suggested Follow-ups</span>
-              <span className="text-purple-400">]</span>
-            </div>
-            <div className="space-y-2 pl-3 border-l border-purple-400/30">
-              {analysis.followUps && analysis.followUps.length > 0 ? (
-                analysis.followUps.map((followUp) => (
-                  <div
-                    key={followUp.id}
-                    className="bg-terminal-input/30 p-3 border border-terminal-border rounded"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className="text-xs font-mono text-terminal-muted uppercase tracking-wider">
+            {patterns.length > 0 ? (
+              <Section label="Patterns">
+                <div className="flex flex-wrap gap-1">
+                  {patterns.map((pattern, index) => (
+                    <Tag key={`${pattern}-${index}`}>{pattern}</Tag>
+                  ))}
+                </div>
+              </Section>
+            ) : null}
+
+            {followUps.length > 0 ? (
+              <Section label="Suggested follow-ups">
+                <ul className="mt-0.5">
+                  {followUps.map((followUp, index) => (
+                    <li
+                      key={`${followUp.title}-${index}`}
+                      className="border-b border-line py-2.5 last:border-b-0"
+                    >
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[12px] font-medium text-ink">
                           {followUp.title}
-                        </p>
-                        <p className="text-sm text-text-primary font-mono leading-relaxed mt-1">
-                          {followUp.description}
-                        </p>
+                        </span>
+                        <span
+                          className={cn(
+                            "shrink-0 text-[9px] font-semibold tracking-[.05em] uppercase",
+                            priorityClass(followUp.priority),
+                          )}
+                        >
+                          {followUp.priority}
+                        </span>
                       </div>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-xs font-mono",
-                          getSeverityColor(followUp.priority),
-                        )}
-                      >
-                        {followUp.priority.toUpperCase()}
-                      </Badge>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-terminal-muted font-mono">
-                  No follow-up actions available
-                </p>
-              )}
-            </div>
+                      <p className="mt-0.5 text-[11.5px] leading-[1.5] text-muted">
+                        {followUp.description}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            ) : null}
           </div>
-        </CardContent>
-      </Card>
-    );
-  }
+        )}
+      </div>
 
-  return null;
-};
+      {analysis && (analysis.modelVersion || generatedLabel) ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-line px-4 py-2 text-[10px] text-faint">
+          {analysis.modelVersion ? (
+            <span className="font-mono">{analysis.modelVersion}</span>
+          ) : null}
+          {generatedLabel ? <span>Generated {generatedLabel}</span> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default StreamingAnalysis;
