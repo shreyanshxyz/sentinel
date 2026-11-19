@@ -1,116 +1,97 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Button } from "../../ui/Button";
-import { Badge } from "../../ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { LevelLabel } from "@/components/ui/LevelLabel";
+import { ArrowLeftIcon, CheckIcon, CopyIcon } from "@/components/ui/icons";
 import { LogLevel } from "@/types/log";
-import { cn } from "../../../lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface LogDetailHeaderProps {
   logId: string;
-  logLevel?: LogLevel;
-  onCopyRaw?: () => void;
-  onShare?: () => void;
-  onExport?: () => void;
+  logLevel?: LogLevel | undefined;
+  onCopyRaw?: (() => void) | undefined;
+  onShare?: (() => void) | undefined;
+  onExport?: (() => void) | undefined;
   className?: string;
 }
 
-export const LogDetailHeader: React.FC<LogDetailHeaderProps> = ({
+export function LogDetailHeader({
   logId,
   logLevel,
   onCopyRaw,
   onShare,
   onExport,
   className,
-}) => {
+}: LogDetailHeaderProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopyId = async () => {
     await navigator.clipboard.writeText(logId);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const getLevelColor = (level?: string) => {
-    if (!level) return "text-terminal-muted";
-    const colors: Record<string, string> = {
-      DEBUG: "text-log-debug",
-      INFO: "text-log-info",
-      WARN: "text-log-warn",
-      ERROR: "text-log-error",
-      FATAL: "text-log-fatal",
-    };
-    return colors[level] || "text-terminal-muted";
+    window.setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <header
+    <div
       className={cn(
-        "border-b border-terminal-border bg-terminal-secondary",
-        "px-6 py-4",
+        "flex shrink-0 items-start justify-between gap-4 px-5 pt-3 pb-[14px]",
         className,
       )}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <span className="text-terminal-accent">◀</span>
-              <span>BACK</span>
-            </Button>
-          </Link>
+      <div className="min-w-0">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1 text-[11.5px] text-muted transition-colors duration-150 hover:text-ink"
+        >
+          <ArrowLeftIcon className="h-3 w-3" />
+          Logs
+        </Link>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-terminal-muted font-mono text-xs">
-                LOG ID:
-              </span>
-              <code
-                className={cn(
-                  "font-mono text-sm bg-terminal-input px-2 py-1 border border-terminal-border cursor-pointer hover:border-terminal-accent transition-colors",
-                  getLevelColor(logLevel),
-                )}
-                onClick={handleCopyId}
-                title="Click to copy"
-              >
-                {logId}
-              </code>
-              {copied && (
-                <span className="text-terminal-accent text-xs font-mono animate-pulse">
-                  COPIED
-                </span>
-              )}
-            </div>
-
-            {logLevel && (
-              <Badge variant="log-level" level={logLevel} size="sm">
-                {logLevel}
-              </Badge>
-            )}
-          </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+          <h1 className="text-[20px] leading-[1.2] font-semibold tracking-[-0.025em] text-ink">
+            Event
+          </h1>
+          {logLevel ? <LevelLabel level={logLevel} /> : null}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onCopyRaw}>
-            <span className="text-terminal-muted">[</span>
-            <span>COPY RAW</span>
-            <span className="text-terminal-muted">]</span>
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onShare}>
-            <span className="text-terminal-muted">[</span>
-            <span>SHARE</span>
-            <span className="text-terminal-muted">]</span>
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onExport}>
-            <span className="text-terminal-muted">[</span>
-            <span>EXPORT</span>
-            <span className="text-terminal-muted">]</span>
-          </Button>
+        <div className="mt-1 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleCopyId}
+            title="Copy event ID"
+            className="group inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded-[3px] border border-line bg-sunken px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition-colors duration-150 hover:border-line-strong hover:text-ink"
+          >
+            <span className="truncate">{logId}</span>
+            <CopyIcon className="h-2.5 w-2.5 shrink-0 text-faint group-hover:text-ink" />
+          </button>
+          <span
+            aria-live="polite"
+            className={cn(
+              "inline-flex items-center gap-1 text-[10.5px] text-ok transition-opacity duration-150",
+              copied ? "opacity-100" : "opacity-0",
+            )}
+          >
+            <CheckIcon className="h-2.5 w-2.5" />
+            Copied
+          </span>
         </div>
       </div>
-    </header>
+
+      <div className="flex shrink-0 items-center gap-[7px] pt-0.5">
+        <Button variant="secondary" size="md" onClick={onCopyRaw}>
+          Copy JSON
+        </Button>
+        <Button variant="secondary" size="md" onClick={onShare}>
+          Share
+        </Button>
+        <Button variant="secondary" size="md" onClick={onExport}>
+          Export
+        </Button>
+      </div>
+    </div>
   );
-};
+}
 
 export default LogDetailHeader;
