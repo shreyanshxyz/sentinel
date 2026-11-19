@@ -1,9 +1,8 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from "axios";
 import { ApiResponse, HealthResponse, SearchResponse } from "@/types/api";
 import { LogEntry, LogFilter, AIInsight, LogSource } from "@/types/log";
+import { getApiBaseUrl } from "@/lib/settings";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
 
@@ -25,7 +24,7 @@ class APIClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: API_BASE_URL,
+      baseURL: getApiBaseUrl(),
       timeout: 30000,
       headers: {
         "Content-Type": "application/json",
@@ -195,7 +194,7 @@ class APIClient {
     controller: AbortController;
   } {
     const eventSource = new EventSource(
-      `${API_BASE_URL}/logs/${logId}/analyze-stream`
+      `${getApiBaseUrl()}/logs/${logId}/analyze-stream`
     );
 
     const controller = new AbortController();
@@ -235,7 +234,7 @@ export async function checkAPIHealth(timeout = 5000): Promise<boolean> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    const response = await fetch(`${API_BASE_URL}/health`, {
+    const response = await fetch(`${getApiBaseUrl()}/health`, {
       method: "GET",
       signal: controller.signal,
     });
