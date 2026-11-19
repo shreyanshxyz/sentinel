@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { LogDetailHeader } from "@/components/features/LogDetail/LogDetailHeader";
 import { LogMetadataPanel } from "@/components/features/LogDetail/LogMetadataPanel";
 import { LogRawView } from "@/components/features/LogDetail/LogRawView";
 import { StreamingAnalysis } from "@/components/features/LogDetail/StreamingAnalysis";
-import { Spinner } from "@/components/ui/Spinner";
+import { PageHead } from "@/components/layout/PageHead";
 import { Button } from "@/components/ui/Button";
-import { FollowUpAction } from "@/types/log";
+import { Spinner } from "@/components/ui/Spinner";
 import { useLog, useLogAnalysis } from "@/hooks/useQueries";
 import { APIError } from "@/lib/api";
 
@@ -45,16 +44,18 @@ export default function LogDetailPage() {
     }
   };
 
-  const handleFollowUpClick = (action: FollowUpAction) => {
-    console.log("Follow-up action clicked:", action);
-    alert(`Action: ${action.title}\n${action.description}`);
-  };
+  void aiInsight;
 
   if (isLogLoading) {
     return (
-      <div className="h-screen flex flex-col bg-terminal-bg">
-        <div className="flex-1 flex items-center justify-center">
-          <Spinner variant="blocks" size="lg" text="LOADING LOG..." />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 flex-col gap-2 px-5 pt-3 pb-3.5">
+          <div className="h-3 w-10 rounded-[2px] bg-sunken" />
+          <div className="h-5 w-20 rounded-[2px] bg-sunken" />
+          <div className="h-3 w-56 rounded-[2px] bg-sunken" />
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <Spinner size="md" label="Loading event…" />
         </div>
       </div>
     );
@@ -64,32 +65,39 @@ export default function LogDetailPage() {
     const errorMessage =
       logError instanceof APIError
         ? logError.message
-        : "Failed to load log data";
+        : "Failed to load event data.";
     const errorCode =
       logError instanceof APIError ? logError.code : "UNKNOWN_ERROR";
 
     return (
-      <div className="h-screen flex flex-col bg-terminal-bg">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <div className="text-log-error text-4xl font-mono">ERROR</div>
-            <p className="text-terminal-muted font-mono">{errorMessage}</p>
-            <p className="text-terminal-muted font-mono text-sm">
-              Error Code: {errorCode}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PageHead title="Event" subtitle="Event unavailable" />
+        <div className="flex flex-1 items-center justify-center px-5 pb-10">
+          <div className="w-full max-w-[440px] rounded-[5px] border border-line p-6">
+            <h2 className="text-[13px] font-semibold text-ink">
+              Could not load this event
+            </h2>
+            <p className="mt-2 text-[11.5px] leading-[1.5] text-muted">
+              {errorMessage}
             </p>
-            <div className="space-x-4 mt-4">
-              <button
+            <p className="mt-1 font-mono text-[10.5px] text-faint">
+              {errorCode}
+            </p>
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 border border-terminal-border bg-terminal-input hover:border-terminal-accent hover:bg-terminal-border transition-colors font-mono text-sm cursor-pointer"
               >
-                [ RETRY ]
-              </button>
-              <button
+                Retry
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => router.push("/")}
-                className="px-4 py-2 border border-terminal-border bg-terminal-input hover:border-terminal-accent hover:bg-terminal-border transition-colors font-mono text-sm cursor-pointer"
               >
-                [ RETURN TO HOME ]
-              </button>
+                Back to logs
+              </Button>
             </div>
           </div>
         </div>
@@ -99,19 +107,26 @@ export default function LogDetailPage() {
 
   if (!log) {
     return (
-      <div className="h-screen flex flex-col bg-terminal-bg">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <div className="text-log-error text-4xl font-mono">NOT FOUND</div>
-            <p className="text-terminal-muted font-mono">
-              Log with ID &quot;{logId}&quot; not found
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PageHead title="Event" subtitle="Event not found" />
+        <div className="flex flex-1 items-center justify-center px-5 pb-10">
+          <div className="w-full max-w-[440px] rounded-[5px] border border-line p-6">
+            <h2 className="text-[13px] font-semibold text-ink">
+              Event not found
+            </h2>
+            <p className="mt-2 text-[11.5px] leading-[1.5] text-muted">
+              No log with ID{" "}
+              <span className="font-mono text-[11px] text-ink-2">{logId}</span>{" "}
+              exists in this store.
             </p>
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-4"
               onClick={() => router.push("/")}
-              className="mt-4 px-4 py-2 border border-terminal-border bg-terminal-input hover:border-terminal-accent hover:bg-terminal-border transition-colors font-mono text-sm cursor-pointer"
             >
-              [ RETURN TO HOME ]
-            </button>
+              Back to logs
+            </Button>
           </div>
         </div>
       </div>
@@ -119,7 +134,7 @@ export default function LogDetailPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-terminal-bg">
+    <div className="flex min-h-0 flex-1 flex-col">
       <LogDetailHeader
         logId={logId}
         logLevel={log.level}
@@ -128,19 +143,15 @@ export default function LogDetailPage() {
         onExport={handleExport}
       />
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-line min-[1100px]:flex-row min-[1100px]:overflow-hidden">
+        <main className="min-w-0 flex-1 min-[1100px]:overflow-y-auto">
           <LogMetadataPanel log={log} />
-          <LogRawView log={log} className="flex-1 min-h-100" />
-        </div>
+          <LogRawView log={log} />
+        </main>
 
-        <div className="w-100 border-l border-terminal-border bg-terminal-secondary overflow-y-auto hidden lg:block">
+        <aside className="h-[460px] shrink-0 border-t border-line bg-canvas min-[1100px]:h-auto min-[1100px]:w-[380px] min-[1100px]:border-t-0 min-[1100px]:border-l">
           <StreamingAnalysis logId={logId} />
-        </div>
-
-        <div className="lg:hidden border-t border-terminal-border bg-terminal-secondary p-4">
-          <StreamingAnalysis logId={logId} />
-        </div>
+        </aside>
       </div>
     </div>
   );
