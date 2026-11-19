@@ -42,11 +42,12 @@ export function BarsIcon(props: IconProps) {
   );
 }
 
-export function GearIcon(props: IconProps) {
+export function SlidersIcon(props: IconProps) {
   return (
     <svg {...iconProps(props)}>
-      <circle cx="8" cy="8" r="2.25" />
-      <path d="M8 1.75v1.4M8 12.85v1.4M13.3 4.7l-1.2.7M3.9 10.6l-1.2.7M13.3 11.3l-1.2-.7M3.9 5.4l-1.2-.7" />
+      <path d="M2.5 5.5h11M2.5 10.5h11" />
+      <circle cx="5.75" cy="5.5" r="1.6" />
+      <circle cx="10.25" cy="10.5" r="1.6" />
     </svg>
   );
 }
