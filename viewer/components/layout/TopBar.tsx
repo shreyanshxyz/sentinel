@@ -4,12 +4,7 @@ import { useRef, useSyncExternalStore } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  setTheme,
-  subscribeTheme,
-  themeSnapshot,
-} from "@/lib/theme";
-import { APP_VERSION } from "@/lib/version";
+import { setTheme, subscribeTheme, themeSnapshot } from "@/lib/theme";
 import { MoonIcon, SearchIcon, SunIcon } from "@/components/ui/icons";
 
 export function TopBar() {
@@ -33,15 +28,10 @@ export function TopBar() {
   };
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-canvas px-4">
-      <Link
-        href="/"
-        className="text-[13.5px] font-semibold tracking-[-0.02em] text-ink"
-      >
+    <header className="flex items-center h-12 shrink-0 items-center gap-2 border-b border-line bg-canvas px-5">
+      <Link href="/" className="text-[15.5px] mt-0.5 font-semibold  text-ink">
         Sentinel
       </Link>
-
-      <span aria-hidden className="mx-1 h-4 w-px bg-line" />
 
       <form
         onSubmit={handleSubmit}
@@ -77,9 +67,6 @@ export function TopBar() {
             <MoonIcon className="h-4 w-4" />
           )}
         </button>
-        <span className="font-mono text-[10px] text-faint">
-          v{APP_VERSION}
-        </span>
       </div>
     </header>
   );
