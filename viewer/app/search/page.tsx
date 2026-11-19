@@ -1,508 +1,370 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { Header } from "../../components/layout/Header";
-import { Navigation } from "../../components/layout/Navigation";
-import { Input } from "../../components/ui/Input";
-import { Button } from "../../components/ui/Button";
-import { Select } from "../../components/ui/Select";
-import { Card } from "../../components/ui/Card";
-import { Badge } from "../../components/ui/Badge";
-import { Spinner } from "../../components/ui/Spinner";
-import { LogItem } from "../../components/features/LogItem/LogItem";
-import { LogEntry, LogLevel, LogFilter } from "@/types/log";
-import { useSearchLogs } from "@/hooks/useQueries";
-import { cn } from "../../lib/utils";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { PageHead } from "@/components/layout/PageHead";
+import { LogTable } from "@/components/features/LogFeed/LogTable";
+import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
+import { Spinner } from "@/components/ui/Spinner";
+import { SearchIcon } from "@/components/ui/icons";
+import { LogEntry, LogFilter, LogLevel } from "@/types/log";
+import { useSearchLogs, useSources } from "@/hooks/useQueries";
 import { APIError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
-interface DateRange {
-  start: string;
-  end: string;
+type RangeKey = "any" | "15m" | "1h" | "6h" | "24h" | "7d" | "custom";
+
+const RANGE_OPTIONS: { value: RangeKey; label: string }[] = [
+  { value: "any", label: "Any time" },
+  { value: "15m", label: "Last 15 minutes" },
+  { value: "1h", label: "Last hour" },
+  { value: "6h", label: "Last 6 hours" },
+  { value: "24h", label: "Last 24 hours" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "custom", label: "Custom range" },
+];
+
+const LEVELS: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR", "FATAL"];
+
+const RANGE_MS: Record<Exclude<RangeKey, "any" | "custom">, number> = {
+  "15m": 15 * 60_000,
+  "1h": 60 * 60_000,
+  "6h": 6 * 60 * 60_000,
+  "24h": 24 * 60 * 60_000,
+  "7d": 7 * 24 * 60 * 60_000,
+};
+
+function rangeBounds(
+  range: RangeKey,
+  customStart: string,
+  customEnd: string,
+): { startTime?: string; endTime?: string } {
+  if (range === "any") return {};
+
+  if (range === "custom") {
+    const bounds: { startTime?: string; endTime?: string } = {};
+    if (customStart) bounds.startTime = new Date(customStart).toISOString();
+    if (customEnd) bounds.endTime = new Date(customEnd).toISOString();
+    return bounds;
+  }
+
+  return {
+    startTime: new Date(Date.now() - RANGE_MS[range]).toISOString(),
+  };
 }
 
-interface SearchFilters {
-  query: string;
-  service: string;
-  level: LogLevel | "";
-  dateRange: DateRange;
-  labels: Record<string, string>;
+function SearchFallback() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHead title="Search" subtitle="Query the log store" />
+      <div className="flex items-center gap-2 border-y border-line px-5 py-3 text-[11px] text-muted">
+        <Spinner size="sm" />
+        Loading search…
+      </div>
+    </div>
+  );
 }
 
-export default function SearchPage() {
+function SearchScreen({ initialQuery }: { initialQuery: string }) {
   const router = useRouter();
-  const [filters, setFilters] = useState<SearchFilters>({
-    query: "",
-    service: "",
-    level: "",
-    dateRange: {
-      start: "",
-      end: "",
-    },
-    labels: {},
-  });
 
-  const [hasSearched, setHasSearched] = useState(false);
-  const [hoveredLog, setHoveredLog] = useState<string | null>(null);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [query, setQuery] = useState(initialQuery);
+  const [level, setLevel] = useState<LogLevel | "">("");
+  const [source, setSource] = useState("");
+  const [range, setRange] = useState<RangeKey>("any");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
 
-  const navigationItems = [
-    { label: "Live Feed", href: "/" },
-    { label: "Search", href: "/search", badge: "NEW" },
-    { label: "Analytics", href: "/analytics" },
-    { label: "Settings", href: "/settings" },
-  ];
+  const initialFilter: LogFilter | null = initialQuery
+    ? { query: initialQuery, limit: 100, offset: 0 }
+    : null;
+  const [appliedFilter, setAppliedFilter] = useState<LogFilter | null>(
+    initialFilter,
+  );
+  const [hasSearched, setHasSearched] = useState(Boolean(initialFilter));
 
-  const buildLogFilter = useCallback((): LogFilter => {
-    const logFilter: LogFilter = {
-      limit: 100,
-      offset: 0,
-    };
-
-    if (filters.query) {
-      logFilter.query = filters.query;
-    }
-
-    if (filters.service) {
-      logFilter.sources = [filters.service];
-    }
-
-    if (filters.level) {
-      logFilter.levels = [filters.level];
-    }
-
-    if (filters.dateRange.start) {
-      logFilter.startTime = new Date(filters.dateRange.start).toISOString();
-    }
-
-    if (filters.dateRange.end) {
-      logFilter.endTime = new Date(filters.dateRange.end).toISOString();
-    }
-
-    return logFilter;
-  }, [filters]);
+  const { data: sourcesData } = useSources();
 
   const {
     data: searchResponse,
-    isLoading: isSearching,
-    error: searchError,
+    isFetching,
+    error,
     refetch: executeSearch,
-  } = useSearchLogs(buildLogFilter(), hasSearched);
+  } = useSearchLogs(appliedFilter ?? {}, hasSearched);
 
-  const results = searchResponse?.data || [];
-  const totalResults = searchResponse?.meta?.total || results.length;
   const facets = searchResponse?.facets;
+  const results: LogEntry[] = searchResponse?.data ?? [];
+  const totalResults = searchResponse?.meta?.total ?? results.length;
 
-  const handleSearch = async () => {
+  const levelOptions = useMemo(
+    () => [
+      { value: "", label: "All levels" },
+      ...LEVELS.map((item) => ({
+        value: item,
+        label: item,
+        hint: facets?.levels?.[item]
+          ? facets.levels[item].toLocaleString()
+          : undefined,
+      })),
+    ],
+    [facets],
+  );
+
+  const sourceOptions = useMemo(() => {
+    const facetNames = facets?.sources ? Object.keys(facets.sources) : [];
+    const apiNames = sourcesData?.map((item) => item.name) ?? [];
+    const names = Array.from(
+      new Set([...facetNames, ...apiNames, ...(source ? [source] : [])]),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return [
+      { value: "", label: "All sources" },
+      ...names.map((name) => ({
+        value: name,
+        label: name,
+        hint: facets?.sources?.[name]
+          ? facets.sources[name].toLocaleString()
+          : undefined,
+      })),
+    ];
+  }, [facets, sourcesData, source]);
+
+  const buildFilter = (): LogFilter => {
+    const filter: LogFilter = { limit: 100, offset: 0 };
+    const trimmed = query.trim();
+    const bounds = rangeBounds(range, customStart, customEnd);
+
+    if (trimmed) filter.query = trimmed;
+    if (level) filter.levels = [level];
+    if (source) filter.sources = [source];
+    if (bounds.startTime) filter.startTime = bounds.startTime;
+    if (bounds.endTime) filter.endTime = bounds.endTime;
+
+    return filter;
+  };
+
+  const handleSearch = () => {
+    const next = buildFilter();
+    const same =
+      appliedFilter !== null &&
+      JSON.stringify(appliedFilter) === JSON.stringify(next);
+
+    if (same) {
+      void executeSearch();
+    } else {
+      setAppliedFilter(next);
+    }
     setHasSearched(true);
-    // Trigger the search
-    await executeSearch();
   };
 
-  const handleClearFilters = () => {
-    setFilters({
-      query: "",
-      service: "",
-      level: "",
-      dateRange: {
-        start: "",
-        end: "",
-      },
-      labels: {},
-    });
+  const handleClear = () => {
+    setQuery("");
+    setLevel("");
+    setSource("");
+    setRange("any");
+    setCustomStart("");
+    setCustomEnd("");
+    setAppliedFilter(null);
     setHasSearched(false);
+
+    if (initialQuery) {
+      router.replace("/search");
+    }
   };
 
-  const handleLogClick = (log: LogEntry) => {
+  const handleRowClick = (log: LogEntry) => {
     router.push(`/logs/${log.id}`);
   };
 
-  const availableSources = facets?.sources
-    ? Object.entries(facets.sources)
-        .sort(([, a], [, b]) => b - a)
-        .map(([name]) => name)
-    : [
-        "api-server",
-        "database",
-        "auth-service",
-        "payment-gateway",
-        "web-server",
-        "cache",
-        "queue-worker",
-      ];
-
-  const serviceOptions = [
-    { value: "", label: "All Services" },
-    ...availableSources.map((source) => ({
-      value: source,
-      label: source,
-    })),
-  ];
-
-  const levelOptions = [
-    { value: "", label: "All Levels" },
-    { value: "DEBUG", label: "DEBUG" },
-    { value: "INFO", label: "INFO" },
-    { value: "WARN", label: "WARN" },
-    { value: "ERROR", label: "ERROR" },
-    { value: "FATAL", label: "FATAL" },
-  ];
-
-  const errorMessage = searchError
-    ? searchError instanceof APIError
-      ? searchError.message
+  const errorMessage = error
+    ? error instanceof APIError
+      ? error.message
       : "Search failed"
     : null;
 
-  return (
-    <div className="h-screen flex flex-col bg-terminal-bg">
-      <Header
-        title="Sentinel"
-        subtitle="Search and filter log entries"
-        status={{
-          connected: true,
-          logsPerSecond: 0,
-          totalLogs: totalResults,
-        }}
-      />
+  const effectiveQuery = appliedFilter?.query;
+  const isSearching = hasSearched && isFetching;
 
-      <div className="border-b border-terminal-border bg-terminal-secondary px-6">
-        <Navigation items={navigationItems} />
+  const emptyState = !hasSearched ? (
+    <div className="flex flex-col items-center gap-1.5">
+      <span>Run a search to see results.</span>
+      <span className="text-[11px] text-faint">
+        Set a query or filters, then press Search.
+      </span>
+    </div>
+  ) : (
+    <div className="flex flex-col items-center gap-2">
+      <span>No events match this query.</span>
+      <button
+        type="button"
+        onClick={handleClear}
+        className="cursor-pointer text-[11.5px] text-ink underline underline-offset-2 hover:text-accent"
+      >
+        Clear filters
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHead title="Search" subtitle="Query the log store" />
+
+      <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-2">
+        <div className="relative flex w-full max-w-[340px] items-center">
+          <SearchIcon className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-faint" />
+          <label htmlFor="search-query" className="sr-only">
+            Search messages, IDs, sources
+          </label>
+          <input
+            id="search-query"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                handleSearch();
+              }
+            }}
+            placeholder="Search messages, IDs, sources"
+            className="h-7 w-full rounded-[5px] border border-line bg-surface pr-2 pl-7 text-[12px] text-ink transition-colors duration-150 placeholder:text-faint hover:border-line-strong focus:border-ink"
+          />
+        </div>
+
+        <Select
+          options={levelOptions}
+          value={level}
+          onChange={(value) => setLevel(value as LogLevel | "")}
+          className="w-[136px]"
+          aria-label="Level"
+        />
+
+        <Select
+          options={sourceOptions}
+          value={source}
+          onChange={setSource}
+          className="w-[168px]"
+          aria-label="Source"
+        />
+
+        <Select
+          options={RANGE_OPTIONS}
+          value={range}
+          onChange={(value) => setRange(value as RangeKey)}
+          className="w-[164px]"
+          aria-label="Time range"
+        />
+
+        <Button
+          variant="primary"
+          size="md"
+          onClick={handleSearch}
+          disabled={isSearching}
+        >
+          {isSearching ? (
+            <>
+              <Spinner size="sm" label="Searching…" />
+            </>
+          ) : (
+            "Search"
+          )}
+        </Button>
+
+        <Button variant="ghost" size="md" onClick={handleClear}>
+          Clear
+        </Button>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Search Sidebar */}
-        <aside
-          className={cn(
-            "border-r border-terminal-border bg-terminal-secondary flex flex-col transition-all duration-300 relative",
-            isSidebarExpanded ? "w-80" : "w-16",
-          )}
-        >
-          <button
-            onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-            className={cn(
-              "absolute top-4 z-10 flex items-center justify-center w-6 h-12 bg-terminal-input border border-terminal-border hover:border-terminal-accent hover:bg-terminal-border transition-all duration-200 group",
-              isSidebarExpanded
-                ? "-right-3 rounded-l-md border-r-0"
-                : "-right-3 rounded-l-md border-r-0",
-            )}
-            title={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+      {range === "custom" ? (
+        <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-2">
+          <label className="flex items-center gap-2 text-[11px] text-muted">
+            From
+            <input
+              type="datetime-local"
+              value={customStart}
+              onChange={(event) => setCustomStart(event.target.value)}
+              className="h-7 rounded-[5px] border border-line bg-surface px-2 text-[12px] text-ink hover:border-line-strong focus:border-ink"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-[11px] text-muted">
+            To
+            <input
+              type="datetime-local"
+              value={customEnd}
+              onChange={(event) => setCustomEnd(event.target.value)}
+              className="h-7 rounded-[5px] border border-line bg-surface px-2 text-[12px] text-ink hover:border-line-strong focus:border-ink"
+            />
+          </label>
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div className="flex items-center gap-3 border-b border-line bg-sunken px-5 py-2 text-[11.5px] text-error">
+          <span className="min-w-0 flex-1 truncate">{errorMessage}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void executeSearch()}
           >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-2 border-b border-line px-5 py-1.5 text-[11px] text-muted">
+        <span className="whitespace-nowrap">
+          {hasSearched
+            ? `${totalResults.toLocaleString()} ${
+                totalResults === 1 ? "result" : "results"
+              }`
+            : "No search yet"}
+        </span>
+        {hasSearched ? (
+          <>
+            <span aria-hidden className="text-line">
+              ·
+            </span>
             <span
               className={cn(
-                "text-terminal-muted group-hover:text-terminal-accent transition-transform duration-200 font-mono text-xs",
-                isSidebarExpanded ? "rotate-0" : "rotate-180",
+                "min-w-0 truncate font-mono text-[10.5px] text-faint",
               )}
+              title={effectiveQuery}
             >
-              ◀
+              {effectiveQuery ? `query: ${effectiveQuery}` : "all events"}
             </span>
-          </button>
+          </>
+        ) : null}
+        {hasSearched && totalResults > results.length ? (
+          <span className="ml-auto whitespace-nowrap">
+            showing first {results.length}
+          </span>
+        ) : null}
+      </div>
 
-          {isSidebarExpanded && (
-            <div className="p-4 border-b border-terminal-border bg-terminal-input/50">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-terminal-accent rounded-full animate-pulse" />
-                <span className="font-mono text-sm text-terminal-accent uppercase tracking-wider">
-                  SEARCH
-                </span>
-              </div>
-            </div>
-          )}
-
-          {isSidebarExpanded ? (
-            <>
-              <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                {/* Text Search */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-mono font-semibold text-terminal-muted uppercase tracking-wider flex items-center gap-2">
-                    <span className="text-terminal-accent">[</span>
-                    QUERY
-                    <span className="text-terminal-accent">]</span>
-                  </h3>
-                  <Input
-                    placeholder="Search logs..."
-                    value={filters.query}
-                    onChange={(e) =>
-                      setFilters((prev) => ({ ...prev, query: e.target.value }))
-                    }
-                    variant="command"
-                    prompt=""
-                  />
-                </div>
-
-                {/* Service Filter */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-mono font-semibold text-terminal-muted uppercase tracking-wider flex items-center gap-2">
-                    <span className="text-terminal-accent">[</span>
-                    SERVICE
-                    <span className="text-terminal-accent">]</span>
-                  </h3>
-                  <Select
-                    options={serviceOptions}
-                    value={filters.service}
-                    onChange={(value) =>
-                      setFilters((prev) => ({ ...prev, service: value }))
-                    }
-                    placeholder="Select service..."
-                    variant="terminal"
-                    size="md"
-                  />
-                </div>
-
-                {/* Level Filter */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-mono font-semibold text-terminal-muted uppercase tracking-wider flex items-center gap-2">
-                    <span className="text-terminal-accent">[</span>
-                    LEVEL
-                    <span className="text-terminal-accent">]</span>
-                  </h3>
-                  <Select
-                    options={levelOptions}
-                    value={filters.level}
-                    onChange={(value) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        level: value as LogLevel,
-                      }))
-                    }
-                    placeholder="Select level..."
-                    variant="terminal"
-                    size="md"
-                  />
-                </div>
-
-                {/* Date Range */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-mono font-semibold text-terminal-muted uppercase tracking-wider flex items-center gap-2">
-                    <span className="text-terminal-accent">[</span>
-                    TIME RANGE
-                    <span className="text-terminal-accent">]</span>
-                  </h3>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-[10px] font-mono text-terminal-muted uppercase">
-                        From
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={filters.dateRange.start}
-                        onChange={(e) =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            dateRange: {
-                              ...prev.dateRange,
-                              start: e.target.value,
-                            },
-                          }))
-                        }
-                        className="w-full h-9 px-3 border border-terminal-fg/30 bg-terminal-input text-terminal-fg font-mono text-sm focus:border-terminal-fg focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-mono text-terminal-muted uppercase">
-                        To
-                      </label>
-                      <input
-                        type="datetime-local"
-                        value={filters.dateRange.end}
-                        onChange={(e) =>
-                          setFilters((prev) => ({
-                            ...prev,
-                            dateRange: {
-                              ...prev.dateRange,
-                              end: e.target.value,
-                            },
-                          }))
-                        }
-                        className="w-full h-9 px-3 border border-terminal-fg/30 bg-terminal-input text-terminal-fg font-mono text-sm focus:border-terminal-fg focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Date Presets */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-mono font-semibold text-terminal-muted uppercase tracking-wider flex items-center gap-2">
-                    <span className="text-terminal-accent">[</span>
-                    PRESETS
-                    <span className="text-terminal-accent">]</span>
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: "Last 1h", hours: 1 },
-                      { label: "Last 6h", hours: 6 },
-                      { label: "Last 24h", hours: 24 },
-                      { label: "Last 7d", hours: 168 },
-                    ].map((preset) => (
-                      <Button
-                        key={preset.label}
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          const end = new Date();
-                          const start = new Date(
-                            end.getTime() - preset.hours * 60 * 60 * 1000,
-                          );
-                          setFilters((prev) => ({
-                            ...prev,
-                            dateRange: {
-                              start: start.toISOString().slice(0, 16),
-                              end: end.toISOString().slice(0, 16),
-                            },
-                          }));
-                        }}
-                      >
-                        {preset.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Search Actions */}
-              <div className="p-4 border-t border-terminal-border bg-terminal-input/30 space-y-2">
-                <Button
-                  variant="terminal"
-                  size="md"
-                  className="w-full"
-                  onClick={handleSearch}
-                  disabled={isSearching}
-                >
-                  {isSearching ? (
-                    <span className="flex items-center gap-2">
-                      <Spinner size="sm" variant="terminal" />
-                      SEARCHING...
-                    </span>
-                  ) : (
-                    "EXECUTE SEARCH"
-                  )}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full"
-                  onClick={handleClearFilters}
-                >
-                  CLEAR FILTERS
-                </Button>
-              </div>
-            </>
-          ) : null}
-        </aside>
-
-        {/* Results Area */}
-        <div className="flex-1 p-4 overflow-hidden">
-          <Card variant="terminal" className="h-full flex flex-col">
-            {/* Results Header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-terminal-fg/20 bg-terminal-input">
-              <div className="flex items-center gap-3">
-                <div className="flex gap-1.5">
-                  <div className="w-2.5 h-2.5 bg-log-error" />
-                  <div className="w-2.5 h-2.5 bg-log-warn" />
-                  <div className="w-2.5 h-2.5 bg-terminal-accent" />
-                </div>
-                <span className="text-terminal-fg font-mono text-xs tracking-wide">
-                  sentinel@search:~$ grep -r
-                  {filters.query && ` "${filters.query}"`}
-                  {filters.service && ` --source=${filters.service}`}
-                  {filters.level && ` --level=${filters.level}`}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {hasSearched && !isSearching && (
-                  <Badge variant="terminal" size="sm">
-                    {results.length} results
-                  </Badge>
-                )}
-              </div>
-            </div>
-
-            {errorMessage && (
-              <div className="p-4 border-b border-log-error bg-log-error/10">
-                <div className="flex items-center gap-2 text-log-error font-mono text-sm">
-                  <span>⚠</span>
-                  <span>{errorMessage}</span>
-                </div>
-              </div>
-            )}
-
-            {/* Results List */}
-            <div className="flex-1 overflow-y-auto font-mono text-sm bg-black">
-              {!hasSearched ? (
-                <div className="flex items-center justify-center h-full text-terminal-muted">
-                  <div className="text-center">
-                    <div className="text-terminal-fg text-lg mb-2">
-                      $ grep --help
-                    </div>
-                    <p className="font-mono text-xs mb-4">
-                      Configure search parameters and click EXECUTE SEARCH
-                    </p>
-                    <div className="text-terminal-muted text-xs space-y-1">
-                      <p>Usage: Enter query terms and filters</p>
-                      <p>Press EXECUTE SEARCH to run query</p>
-                    </div>
-                  </div>
-                </div>
-              ) : isSearching ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <Spinner
-                      variant="blocks"
-                      size="lg"
-                      text="SCANNING LOGS..."
-                    />
-                  </div>
-                </div>
-              ) : results.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-terminal-muted">
-                  <div className="text-center">
-                    <div className="text-log-error text-lg mb-2">
-                      $ grep: no matches found
-                    </div>
-                    <p className="font-mono text-xs">
-                      No logs match your search criteria
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  {results.map((log) => (
-                    <LogItem
-                      key={log.id}
-                      log={log}
-                      onClick={handleLogClick}
-                      isHovered={hoveredLog === log.id}
-                      onMouseEnter={() => setHoveredLog(log.id)}
-                      onMouseLeave={() => setHoveredLog(null)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Results Footer */}
-            <div className="flex items-center justify-between px-4 py-2 border-t border-terminal-fg/20 bg-terminal-input">
-              <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "font-mono text-xs uppercase tracking-wider",
-                    isSearching ? "text-log-warn" : "text-terminal-accent",
-                  )}
-                >
-                  {isSearching ? "◉ SCANNING" : "● READY"}
-                </span>
-              </div>
-
-              <div className="text-terminal-muted font-mono text-xs">
-                {hasSearched && !isSearching
-                  ? `> Found ${results.length} matching entries`
-                  : "> Waiting for query..."}
-              </div>
-            </div>
-          </Card>
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <LogTable
+          logs={results}
+          onRowClick={handleRowClick}
+          loading={isSearching}
+          emptyState={emptyState}
+        />
       </div>
     </div>
+  );
+}
+
+function SearchPageInner() {
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q") ?? "";
+
+  return <SearchScreen key={initialQuery} initialQuery={initialQuery} />;
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<SearchFallback />}>
+      <SearchPageInner />
+    </Suspense>
   );
 }
