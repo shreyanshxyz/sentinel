@@ -1,31 +1,129 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Header } from "../components/layout/Header";
-import { Sidebar } from "../components/layout/Sidebar";
-import { Navigation } from "../components/layout/Navigation";
-import { LogFeed } from "../components/features/LogFeed/LogFeed";
-import { Button } from "../components/ui/Button";
-import { Spinner } from "../components/ui/Spinner";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { PageHead } from "@/components/layout/PageHead";
+import { FilterBar } from "@/components/features/LogFeed/FilterBar";
+import { LogFeed } from "@/components/features/LogFeed/LogFeed";
+import { LogTable } from "@/components/features/LogFeed/LogTable";
+import { VolumeHistogram } from "@/components/features/LogFeed/VolumeHistogram";
+import { Button } from "@/components/ui/Button";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { StatusChip } from "@/components/ui/StatusChip";
 import { LogEntry, LogLevel } from "@/types/log";
 import { useLogStream, useLogBuffer } from "@/hooks/useLogStream";
-import { useLogs, useHealth, useSources } from "@/hooks/useQueries";
+import { useLogs, useSources } from "@/hooks/useQueries";
 import { APIError, checkAPIHealth } from "@/lib/api";
+import { downloadLogs } from "@/lib/export";
+import { formatRelative } from "@/lib/format";
+import {
+  clearStoredFilters,
+  getSettings,
+  readStoredFilters,
+  writeStoredFilters,
+} from "@/lib/settings";
+import { useSettings } from "@/providers/SettingsProvider";
+import { cn } from "@/lib/utils";
+
+type Range = "15m" | "1h" | "24h" | "7d";
+
+const LEVEL_VALUES: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR", "FATAL"];
+
+function isLogLevel(value: string): value is LogLevel {
+  return (LEVEL_VALUES as string[]).includes(value);
+}
+
+function isRange(value: string): value is Range {
+  return value === "15m" || value === "1h" || value === "24h" || value === "7d";
+}
+
+const RANGE_MS: Record<Range, number> = {
+  "15m": 15 * 60_000,
+  "1h": 60 * 60_000,
+  "24h": 24 * 60 * 60_000,
+  "7d": 7 * 24 * 60 * 60_000,
+};
+
+const RANGE_OPTIONS: { value: Range; label: string }[] = [
+  { value: "15m", label: "15m" },
+  { value: "1h", label: "1h" },
+  { value: "24h", label: "24h" },
+  { value: "7d", label: "7d" },
+];
+
+function Metric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "error" | "warn" | undefined;
+}) {
+  return (
+    <div className="min-w-0 flex-1 border-l border-line px-4 py-2.5 first:border-l-0">
+      <div className="text-[10px] font-semibold tracking-[.08em] text-faint uppercase">
+        {label}
+      </div>
+      <div
+        className={cn(
+          "mt-1 text-[21px] leading-[1.1] font-semibold tabular-nums",
+          tone === "error" && "text-error",
+          tone === "warn" && "text-warn",
+          !tone && "text-ink",
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
+  const router = useRouter();
+  const settings = useSettings();
   const [searchQuery, setSearchQuery] = useState("");
-  const [filters, setFilters] = useState({
-    levels: [] as LogLevel[],
-    sources: [] as string[],
-    labels: {} as Record<string, string[]>,
-  });
+  const [levels, setLevels] = useState<LogLevel[]>([]);
+  const [sources, setSources] = useState<string[]>([]);
+  const [range, setRange] = useState<Range>("1h");
   const [isPaused, setIsPaused] = useState(false);
   const [isApiAvailable, setIsApiAvailable] = useState<boolean | null>(null);
   const [useFallbackMode, setUseFallbackMode] = useState(false);
 
   useEffect(() => {
+    if (!getSettings().persistFilters) return;
+    const stored = readStoredFilters();
+    if (!stored) return;
+
+    queueMicrotask(() => {
+      setSearchQuery(stored.searchQuery);
+      setLevels(stored.levels.filter(isLogLevel));
+      setSources(stored.sources);
+      if (isRange(stored.range)) setRange(stored.range);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!settings.persistFilters) {
+      clearStoredFilters();
+      return;
+    }
+
+    writeStoredFilters({ searchQuery, levels, sources, range });
+  }, [
+    settings.persistFilters,
+    searchQuery,
+    levels,
+    sources,
+    range,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const checkHealth = async () => {
       const isHealthy = await checkAPIHealth(5000);
+      if (cancelled) return;
       setIsApiAvailable(isHealthy);
 
       if (!isHealthy) {
@@ -36,29 +134,38 @@ export default function Home() {
     };
 
     checkHealth();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const {
     data: initialLogs,
     isLoading: isLoadingInitial,
     error: initialLogsError,
-  } = useLogs({ limit: 100 }, isApiAvailable !== false);
-
-  const { data: healthData } = useHealth({
-    refetchInterval: 30000,
-  });
+  } = useLogs({ limit: 100 }, isApiAvailable !== false && !useFallbackMode);
 
   const { data: sourcesData } = useSources(isApiAvailable !== false);
 
-  const { logs: bufferedLogs, addLog, clear } = useLogBuffer(1000);
+  const { logs: bufferedLogs, addLog, clear } = useLogBuffer(
+    settings.maxLogsInMemory,
+  );
+
+  // The stream callback keeps a stable identity so pause/resume never tears
+  // down the EventSource; appends are gated through this ref instead.
+  const isPausedRef = useRef(isPaused);
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
 
   const handleNewLog = useCallback(
     (log: LogEntry) => {
-      if (!isPaused) {
+      if (!isPausedRef.current) {
         addLog(log);
       }
     },
-    [isPaused, addLog],
+    [addLog],
   );
 
   const {
@@ -69,11 +176,8 @@ export default function Home() {
     disconnect,
   } = useLogStream({
     onLog: handleNewLog,
-    onConnect: () => console.log("Connected to log stream"),
-    onDisconnect: () => console.log("Disconnected from log stream"),
-    onError: (err) => console.error("Stream error:", err),
-    reconnectInterval: 5000,
-    maxReconnectAttempts: 10,
+    reconnectInterval: settings.reconnectInterval,
+    maxReconnectAttempts: settings.maxReconnectAttempts,
   });
 
   useEffect(() => {
@@ -86,9 +190,14 @@ export default function Home() {
     };
   }, [isApiAvailable, useFallbackMode, connect, disconnect]);
 
-  const allLogs = React.useMemo(() => {
-    const logs = [...(initialLogs || []), ...bufferedLogs];
+  const [windowNow, setWindowNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setWindowNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
+  const allLogs = useMemo(() => {
+    const logs = [...(initialLogs || []), ...bufferedLogs];
     const uniqueLogs = Array.from(
       new Map(logs.map((log) => [log.id, log])).values(),
     );
@@ -99,87 +208,145 @@ export default function Home() {
     );
   }, [initialLogs, bufferedLogs]);
 
-  const filteredLogs = React.useMemo(() => {
-    return allLogs.filter((log) => {
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch =
+  const windowedLogs = useMemo(() => {
+    const cutoff = windowNow - RANGE_MS[range];
+    return allLogs.filter(
+      (log) => new Date(log.timestamp).getTime() >= cutoff,
+    );
+  }, [allLogs, range, windowNow]);
+
+  const filteredLogs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return windowedLogs.filter((log) => {
+      if (query) {
+        const matches =
           log.message.toLowerCase().includes(query) ||
           log.source.toLowerCase().includes(query) ||
           log.id.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
+        if (!matches) return false;
       }
 
-      if (filters.levels.length > 0 && !filters.levels.includes(log.level)) {
-        return false;
-      }
-
-      if (filters.sources.length > 0 && !filters.sources.includes(log.source)) {
-        return false;
-      }
+      if (levels.length > 0 && !levels.includes(log.level)) return false;
+      if (sources.length > 0 && !sources.includes(log.source)) return false;
 
       return true;
     });
-  }, [allLogs, searchQuery, filters]);
+  }, [windowedLogs, searchQuery, levels, sources]);
+
+  const metrics = useMemo(() => {
+    let errors = 0;
+    let warnings = 0;
+    const uniqueSources = new Set<string>();
+
+    for (const log of windowedLogs) {
+      if (log.level === "ERROR" || log.level === "FATAL") errors += 1;
+      if (log.level === "WARN") warnings += 1;
+      uniqueSources.add(log.source);
+    }
+
+    return {
+      records: windowedLogs.length,
+      errors,
+      warnings,
+      sources: uniqueSources.size,
+      rate: logsPerSecond,
+    };
+  }, [windowedLogs, logsPerSecond]);
+
+  const availableSources = useMemo(() => {
+    const fromApi = sourcesData?.map((source) => source.name) ?? [];
+    const fromLogs = allLogs.map((log) => log.source);
+    const names = fromApi.length > 0 ? fromApi : fromLogs;
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+  }, [sourcesData, allLogs]);
+
+  const feedLogs = useMemo(() => [...filteredLogs].reverse(), [filteredLogs]);
+
+  const lastEventAt = allLogs[0]?.timestamp;
+  const sourceCount = sourcesData?.length || metrics.sources;
+  const hasFilters =
+    searchQuery.length > 0 || levels.length > 0 || sources.length > 0;
+
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setLevels([]);
+    setSources([]);
+  };
 
   const handleClearLogs = () => {
     clear();
   };
 
-  const navigationItems = [
-    { label: "Live Feed", href: "/", badge: isConnected ? "LIVE" : "OFFLINE" },
-    { label: "Search", href: "/search" },
-    { label: "Analytics", href: "/analytics" },
-    { label: "Settings", href: "/settings" },
-  ];
+  const handleLogClick = (log: LogEntry) => {
+    router.push(`/logs/${log.id}`);
+  };
 
-  const headerActions = (
-    <>
-      <Button variant="terminal" size="sm">
-        Quick Filter
-      </Button>
-      <Button variant="secondary" size="sm">
-        Export
-      </Button>
-    </>
+  const handleExport = () => {
+    if (filteredLogs.length === 0) return;
+    downloadLogs(filteredLogs);
+  };
+
+  const emptyState = (
+    <div className="flex flex-col items-center gap-2">
+      <span>No events in this window.</span>
+      {hasFilters ? (
+        <button
+          type="button"
+          onClick={handleClearFilters}
+          className="cursor-pointer text-[11.5px] text-ink underline underline-offset-2 hover:text-accent"
+        >
+          Clear filters
+        </button>
+      ) : (
+        <span className="text-[11px] text-faint">
+          Waiting for new events on the live stream.
+        </span>
+      )}
+    </div>
   );
 
-  const handleLogClick = (log: LogEntry) => {
-    console.log("Log clicked:", log.id);
-    window.location.href = `/logs/${log.id}`;
-  };
+  if (initialLogsError && !useFallbackMode) {
+    const message =
+      initialLogsError instanceof APIError
+        ? initialLogsError.message
+        : "The API request failed.";
+    const code =
+      initialLogsError instanceof APIError ? initialLogsError.code : undefined;
 
-  const handleFiltersChange = (newFilters: typeof filters) => {
-    setFilters(newFilters);
-  };
-
-  if (initialLogsError && initialLogsError instanceof APIError) {
     return (
-      <div className="h-screen flex flex-col bg-terminal-bg">
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <div className="text-log-error text-4xl font-mono">API ERROR</div>
-            <p className="text-terminal-muted font-mono">
-              {initialLogsError.message}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PageHead
+          title="Logs"
+          subtitle="Live log monitoring"
+          status={<StatusChip tone="error">Offline</StatusChip>}
+        />
+        <div className="flex flex-1 items-center justify-center px-5 pb-10">
+          <div className="w-full max-w-[440px] rounded-[5px] border border-line bg-canvas p-6">
+            <h2 className="text-[13px] font-semibold text-ink">
+              Can&apos;t reach the API
+            </h2>
+            <p className="mt-2 text-[11.5px] leading-[1.5] text-muted">
+              {message}
             </p>
-            {initialLogsError.code && (
-              <p className="text-terminal-muted font-mono text-sm">
-                Error Code: {initialLogsError.code}
-              </p>
-            )}
-            <div className="space-x-4 mt-4">
-              <button
+            {code ? (
+              <p className="mt-1 font-mono text-[10.5px] text-faint">{code}</p>
+            ) : null}
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => window.location.reload()}
-                className="px-4 py-2 border border-terminal-border bg-terminal-input hover:border-terminal-accent hover:bg-terminal-border transition-colors font-mono text-sm"
               >
-                [ RETRY ]
-              </button>
-              <button
+                Retry
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setUseFallbackMode(true)}
-                className="px-4 py-2 border border-terminal-border bg-terminal-input hover:border-terminal-accent hover:bg-terminal-border transition-colors font-mono text-sm"
               >
-                [ USE OFFLINE MODE ]
-              </button>
+                Use offline mode
+              </Button>
             </div>
           </div>
         </div>
@@ -189,64 +356,124 @@ export default function Home() {
 
   if (isLoadingInitial && !useFallbackMode) {
     return (
-      <div className="h-screen flex flex-col bg-terminal-bg">
-        <div className="flex-1 flex items-center justify-center">
-          <Spinner variant="blocks" size="lg" text="CONNECTING TO API..." />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PageHead
+          title="Logs"
+          subtitle="Loading recent events"
+          status={<StatusChip tone="paused">Connecting</StatusChip>}
+        />
+        <div className="flex border-y border-line">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div
+              key={index}
+              className="min-w-0 flex-1 border-l border-line px-4 py-2.5 first:border-l-0"
+            >
+              <div className="h-2 w-12 bg-line" />
+              <div className="mt-2 h-4 w-16 bg-sunken" />
+            </div>
+          ))}
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <LogTable logs={[]} loading />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-terminal-bg">
-      <Header
-        title="Sentinel"
-        subtitle="Real-time log monitoring and analysis"
-        actions={headerActions}
-        status={{
-          connected: isConnected,
-          logsPerSecond: Number(logsPerSecond.toFixed(1)),
-          totalLogs: filteredLogs.length,
-        }}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHead
+        title="Logs"
+        status={
+          <StatusChip tone={isPaused ? "paused" : "live"}>
+            {isPaused ? "Paused" : "Live"}
+          </StatusChip>
+        }
+        subtitle={`Streaming from ${sourceCount.toLocaleString()} ${
+          sourceCount === 1 ? "source" : "sources"
+        }`}
+        actions={
+          <>
+            <SegmentedControl
+              options={RANGE_OPTIONS}
+              value={range}
+              onChange={setRange}
+              ariaLabel="Time window"
+            />
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={handleExport}
+              disabled={filteredLogs.length === 0}
+            >
+              Export
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => setIsPaused((paused) => !paused)}
+            >
+              {isPaused ? "Resume stream" : "Pause stream"}
+            </Button>
+          </>
+        }
       />
 
-      <div className="border-b border-terminal-border bg-terminal-secondary px-6">
-        <Navigation items={navigationItems} />
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        <Sidebar
-          filters={filters}
-          onFiltersChange={handleFiltersChange}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          availableSources={sourcesData?.map((s) => s.name) || []}
+      <div className="flex border-y border-line">
+        <Metric label="Records" value={metrics.records.toLocaleString()} />
+        <Metric
+          label="Errors"
+          value={metrics.errors.toLocaleString()}
+          tone={metrics.errors > 0 ? "error" : undefined}
         />
-
-        <div className="flex-1 p-4">
-          {streamError && (
-            <div className="mb-4 p-2 border border-log-error text-log-error font-mono text-sm">
-              Stream Error: {streamError.message}. Attempting to reconnect...
-            </div>
-          )}
-
-          {!isConnected && !useFallbackMode && (
-            <div className="mb-4 p-2 border border-terminal-accent text-terminal-accent font-mono text-sm">
-              Connecting to real-time log stream...
-            </div>
-          )}
-
-          <LogFeed
-            logs={filteredLogs}
-            autoScroll={true}
-            onLogClick={handleLogClick}
-            isPaused={isPaused}
-            onPauseChange={setIsPaused}
-            onClear={handleClearLogs}
-            navigateOnClick={true}
-          />
-        </div>
+        <Metric
+          label="Warnings"
+          value={metrics.warnings.toLocaleString()}
+          tone={metrics.warnings > 0 ? "warn" : undefined}
+        />
+        <Metric label="Sources" value={metrics.sources.toLocaleString()} />
+        <Metric
+          label="Rate"
+          value={`${metrics.rate.toFixed(0)}/s`}
+        />
       </div>
+
+      <FilterBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        levels={levels}
+        sources={sources}
+        availableSources={availableSources}
+        onLevelsChange={setLevels}
+        onSourcesChange={setSources}
+        onClear={handleClearFilters}
+      />
+
+      <div className="flex items-center gap-2 border-b border-line px-5 py-1.5 text-[11px] text-muted">
+        <span className="truncate">
+          {filteredLogs.length.toLocaleString()} events · updated{" "}
+          {lastEventAt ? formatRelative(lastEventAt) : "—"}
+        </span>
+        <span className="ml-auto whitespace-nowrap tabular-nums">
+          Showing {filteredLogs.length.toLocaleString()} of{" "}
+          {windowedLogs.length.toLocaleString()}
+        </span>
+      </div>
+
+      <VolumeHistogram logs={allLogs} minutes={60} />
+
+      <LogFeed
+        logs={feedLogs}
+        isPaused={isPaused}
+        isConnected={isConnected}
+        streamError={streamError}
+        totalBuffered={bufferedLogs.length}
+        lastEventAt={lastEventAt}
+        onLogClick={handleLogClick}
+        onClear={handleClearLogs}
+        onRetry={connect}
+        emptyState={emptyState}
+      />
     </div>
   );
 }
