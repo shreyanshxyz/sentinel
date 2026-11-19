@@ -3,7 +3,6 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ReactNode } from "react";
 import { QueryProvider } from "@/providers/QueryProvider";
-import { AppShell } from "@/components/layout/AppShell";
 import { THEME_SCRIPT } from "@/lib/theme";
 import { settingsBootstrap } from "@/lib/settings";
 import { SettingsProvider } from "@/providers/SettingsProvider";
@@ -41,9 +40,7 @@ export default function RootLayout({
         className={`${inter.variable} ${jetbrainsMono.variable} min-h-screen bg-canvas font-sans text-ink antialiased`}
       >
         <QueryProvider>
-          <SettingsProvider>
-            <AppShell>{children}</AppShell>
-          </SettingsProvider>
+          <SettingsProvider>{children}</SettingsProvider>
         </QueryProvider>
       </body>
     </html>
