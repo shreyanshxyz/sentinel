@@ -1,693 +1,447 @@
 "use client";
 
-import React, { useState } from "react";
-import { Header } from "../../components/layout/Header";
-import { Navigation } from "../../components/layout/Navigation";
-import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui/Card";
-import { Input } from "../../components/ui/Input";
-import { Select } from "../../components/ui/Select";
-import { Checkbox } from "../../components/ui/Checkbox";
-import { Badge } from "../../components/ui/Badge";
-import { cn } from "../../lib/utils";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { PageHead } from "@/components/layout/PageHead";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { useSettings } from "@/providers/SettingsProvider";
+import {
+  DEFAULT_SETTINGS,
+  normalizeSettings,
+  writeSettings,
+  type FontSizeSetting,
+  type LineHeightSetting,
+  type SentinelSettings,
+  type ThemeSetting,
+  type TimestampFormatSetting,
+} from "@/lib/settings";
+import { applyTheme, setTheme } from "@/lib/theme";
+import { APP_VERSION } from "@/lib/version";
+import { cn } from "@/lib/utils";
 
-interface SettingsState {
-  theme: "dark" | "light" | "system";
-  fontSize: "small" | "medium" | "large";
-  lineHeight: "compact" | "normal" | "relaxed";
-  timestampFormat: "iso" | "local" | "relative";
-  showMilliseconds: boolean;
-  colorizeLogs: boolean;
+const SECTIONS = [
+  { id: "display", label: "Display" },
+  { id: "connection", label: "Connection" },
+  { id: "data", label: "Data" },
+  { id: "about", label: "About" },
+] as const;
 
-  apiEndpoint: string;
-  wsEndpoint: string;
-  reconnectInterval: number;
-  maxReconnectAttempts: number;
+type SectionId = (typeof SECTIONS)[number]["id"];
 
-  maxLogsInMemory: number;
-  autoCleanup: boolean;
-  cleanupInterval: number;
-  persistFilters: boolean;
+const THEME_OPTIONS = [
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "system", label: "System" },
+];
 
-  enableNotifications: boolean;
-  notifyOnError: boolean;
-  notifyOnFatal: boolean;
+const FONT_SIZE_OPTIONS = [
+  { value: "small", label: "Small" },
+  { value: "medium", label: "Medium" },
+  { value: "large", label: "Large" },
+];
 
-  shortcuts: {
-    pause: string;
-    clear: string;
-    search: string;
-    settings: string;
-  };
+const LINE_HEIGHT_OPTIONS = [
+  { value: "compact", label: "Compact" },
+  { value: "normal", label: "Normal" },
+  { value: "relaxed", label: "Relaxed" },
+];
+
+const TIMESTAMP_OPTIONS = [
+  { value: "local", label: "Local time" },
+  { value: "iso", label: "ISO 8601" },
+  { value: "relative", label: "Relative" },
+];
+
+function Field({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  help?: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[11px] font-medium text-ink-2">{label}</div>
+      {children}
+      {help ? (
+        <p className="text-[11px] leading-[1.4] text-muted">{help}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function SectionTitle({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mb-4">
+      <h2 className="text-[13px] font-semibold text-ink">{title}</h2>
+      <p className="mt-0.5 text-[11.5px] text-muted">{description}</p>
+    </div>
+  );
+}
+
+function NumberInput({
+  label,
+  help,
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  onChange,
+}: {
+  label: string;
+  help?: string | undefined;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  suffix?: string | undefined;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <Field label={label} help={help}>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step ?? 1}
+          value={value}
+          onChange={(event) => {
+            const next = Number.parseInt(event.target.value, 10);
+            onChange(Number.isFinite(next) ? next : min);
+          }}
+          className="h-7 w-28 rounded-[5px] border border-line bg-surface px-2 font-mono text-[11.5px] text-ink tabular-nums transition-colors duration-150 hover:border-line-strong focus:border-ink"
+        />
+        {suffix ? (
+          <span className="text-[11px] text-faint">{suffix}</span>
+        ) : null}
+      </div>
+    </Field>
+  );
 }
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<SettingsState>({
-    theme: "dark",
-    fontSize: "medium",
-    lineHeight: "normal",
-    timestampFormat: "local",
-    showMilliseconds: true,
-    colorizeLogs: true,
-    apiEndpoint: "http://localhost:8080/api",
-    wsEndpoint: "ws://localhost:8080/ws",
-    reconnectInterval: 5000,
-    maxReconnectAttempts: 10,
-    maxLogsInMemory: 10000,
-    autoCleanup: true,
-    cleanupInterval: 300,
-    persistFilters: true,
-    enableNotifications: false,
-    notifyOnError: true,
-    notifyOnFatal: true,
-    shortcuts: {
-      pause: "Space",
-      clear: "Ctrl+K",
-      search: "Ctrl+F",
-      settings: "Ctrl+,",
-    },
-  });
-
-  const [activeSection, setActiveSection] = useState<string>("display");
-  const [hasChanges, setHasChanges] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
-    "idle",
+  const saved = useSettings();
+  const [section, setSection] = useState<SectionId>("display");
+  const [draftOverride, setDraftOverride] = useState<SentinelSettings | null>(
+    null,
   );
+  const [justSaved, setJustSaved] = useState(false);
+  const [resetArmed, setResetArmed] = useState(false);
+  const savedTimer = useRef<number | null>(null);
 
-  const navigationItems = [
-    { label: "Live Feed", href: "/" },
-    { label: "Search", href: "/search" },
-    { label: "Analytics", href: "/analytics" },
-    { label: "Settings", href: "/settings", badge: "CONFIG" },
-  ];
+  const draft = draftOverride ?? saved;
+  const hasChanges =
+    draftOverride !== null &&
+    JSON.stringify(normalizeSettings(draft)) !== JSON.stringify(saved);
 
-  const handleSettingChange = <K extends keyof SettingsState>(
-    key: K,
-    value: SettingsState[K],
-  ) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
-    setHasChanges(true);
+  useEffect(() => {
+    return () => {
+      if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!resetArmed) return;
+    const timer = window.setTimeout(() => setResetArmed(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [resetArmed]);
+
+  const flashSaved = () => {
+    setJustSaved(true);
+    if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
+    savedTimer.current = window.setTimeout(() => setJustSaved(false), 2000);
   };
 
-  const handleSave = async () => {
-    setSaveStatus("saving");
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setSaveStatus("saved");
-    setHasChanges(false);
-    setTimeout(() => setSaveStatus("idle"), 2000);
+  const update = <K extends keyof SentinelSettings>(
+    key: K,
+    value: SentinelSettings[K],
+  ) => {
+    setDraftOverride((prev) => ({ ...(prev ?? saved), [key]: value }));
+    setJustSaved(false);
+  };
+
+  const handleTheme = (value: ThemeSetting) => {
+    setTheme(value);
+    setDraftOverride((prev) => ({ ...(prev ?? saved), theme: value }));
+    setJustSaved(false);
+  };
+
+  const handleSave = () => {
+    writeSettings(normalizeSettings(draft));
+    setDraftOverride(null);
+    flashSaved();
   };
 
   const handleReset = () => {
-    if (confirm("Reset all settings to defaults?")) {
-      setSettings({
-        theme: "dark",
-        fontSize: "medium",
-        lineHeight: "normal",
-        timestampFormat: "local",
-        showMilliseconds: true,
-        colorizeLogs: true,
-        apiEndpoint: "http://localhost:8080/api",
-        wsEndpoint: "ws://localhost:8080/ws",
-        reconnectInterval: 5000,
-        maxReconnectAttempts: 10,
-        maxLogsInMemory: 10000,
-        autoCleanup: true,
-        cleanupInterval: 300,
-        persistFilters: true,
-        enableNotifications: false,
-        notifyOnError: true,
-        notifyOnFatal: true,
-        shortcuts: {
-          pause: "Space",
-          clear: "Ctrl+K",
-          search: "Ctrl+F",
-          settings: "Ctrl+,",
-        },
-      });
-      setHasChanges(true);
+    if (!resetArmed) {
+      setResetArmed(true);
+      return;
     }
+    setResetArmed(false);
+    writeSettings(DEFAULT_SETTINGS);
+    applyTheme(DEFAULT_SETTINGS.theme);
+    setDraftOverride(null);
+    flashSaved();
   };
 
-  const sections = [
-    { id: "display", label: "DISPLAY", icon: "◈" },
-    { id: "connection", label: "CONNECTION", icon: "◉" },
-    { id: "data", label: "DATA", icon: "◆" },
-    { id: "notifications", label: "NOTIFICATIONS", icon: "◐" },
-    { id: "shortcuts", label: "KEYBOARD", icon: "⌘" },
-    { id: "about", label: "ABOUT", icon: "ℹ" },
-  ];
-
-  const themeOptions = [
-    { value: "dark", label: "Dark (Terminal)" },
-    { value: "light", label: "Light" },
-    { value: "system", label: "System Default" },
-  ];
-
-  const fontSizeOptions = [
-    { value: "small", label: "Small (12px)" },
-    { value: "medium", label: "Medium (14px)" },
-    { value: "large", label: "Large (16px)" },
-  ];
-
-  const lineHeightOptions = [
-    { value: "compact", label: "Compact (1.2)" },
-    { value: "normal", label: "Normal (1.5)" },
-    { value: "relaxed", label: "Relaxed (1.8)" },
-  ];
-
-  const timestampOptions = [
-    { value: "iso", label: "ISO 8601" },
-    { value: "local", label: "Local Time" },
-    { value: "relative", label: "Relative (e.g., 2m ago)" },
-  ];
-
-  const renderDisplaySettings = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-6">
-        <Select
-          label="Theme"
-          options={themeOptions}
-          value={settings.theme}
-          onChange={(value) =>
-            handleSettingChange("theme", value as SettingsState["theme"])
-          }
-          variant="terminal"
-        />
-        <Select
-          label="Font Size"
-          options={fontSizeOptions}
-          value={settings.fontSize}
-          onChange={(value) =>
-            handleSettingChange("fontSize", value as SettingsState["fontSize"])
-          }
-          variant="terminal"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-6">
-        <Select
-          label="Line Height"
-          options={lineHeightOptions}
-          value={settings.lineHeight}
-          onChange={(value) =>
-            handleSettingChange(
-              "lineHeight",
-              value as SettingsState["lineHeight"],
-            )
-          }
-          variant="terminal"
-        />
-        <Select
-          label="Timestamp Format"
-          options={timestampOptions}
-          value={settings.timestampFormat}
-          onChange={(value) =>
-            handleSettingChange(
-              "timestampFormat",
-              value as SettingsState["timestampFormat"],
-            )
-          }
-          variant="terminal"
-        />
-      </div>
-
-      <div className="space-y-3 pt-4 border-t border-terminal-border">
-        <Checkbox
-          variant="bracket"
-          checked={settings.showMilliseconds}
-          onChange={(e) =>
-            handleSettingChange("showMilliseconds", e.target.checked)
-          }
-          label={
-            <span className="font-mono text-sm text-text-primary">
-              Show milliseconds in timestamps
-            </span>
-          }
-        />
-        <Checkbox
-          variant="bracket"
-          checked={settings.colorizeLogs}
-          onChange={(e) =>
-            handleSettingChange("colorizeLogs", e.target.checked)
-          }
-          label={
-            <span className="font-mono text-sm text-text-primary">
-              Colorize log levels (INFO=green, ERROR=red, etc.)
-            </span>
-          }
-        />
-      </div>
-    </div>
-  );
-
-  const renderConnectionSettings = () => (
-    <div className="space-y-6">
-      <div className="space-y-4">
-        <Input
-          label="API Endpoint"
-          value={settings.apiEndpoint}
-          onChange={(e) => handleSettingChange("apiEndpoint", e.target.value)}
-          variant="terminal"
-        />
-        <Input
-          label="WebSocket Endpoint"
-          value={settings.wsEndpoint}
-          onChange={(e) => handleSettingChange("wsEndpoint", e.target.value)}
-          variant="terminal"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-6 pt-4 border-t border-terminal-border">
-        <div>
-          <label className="text-xs font-mono font-medium text-terminal-muted uppercase tracking-wider mb-2 block">
-            Reconnect Interval (ms)
-          </label>
-          <input
-            type="number"
-            value={settings.reconnectInterval}
-            onChange={(e) =>
-              handleSettingChange("reconnectInterval", parseInt(e.target.value))
-            }
-            className="w-full h-9 px-3 border border-terminal-fg/30 bg-terminal-input text-terminal-fg font-mono text-sm focus:border-terminal-fg focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-mono font-medium text-terminal-muted uppercase tracking-wider mb-2 block">
-            Max Reconnect Attempts
-          </label>
-          <input
-            type="number"
-            value={settings.maxReconnectAttempts}
-            onChange={(e) =>
-              handleSettingChange(
-                "maxReconnectAttempts",
-                parseInt(e.target.value),
-              )
-            }
-            className="w-full h-9 px-3 border border-terminal-fg/30 bg-terminal-input text-terminal-fg font-mono text-sm focus:border-terminal-fg focus:outline-none"
-          />
-        </div>
-      </div>
-
-      <div className="p-4 border border-terminal-border bg-terminal-input/30">
-        <div className="flex items-center gap-2 text-terminal-muted text-xs font-mono">
-          <span className="text-terminal-accent">ℹ</span>
-          <span>
-            Connection settings will take effect after restarting the
-            application.
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderDataSettings = () => (
-    <div className="space-y-6">
-      <div>
-        <label className="text-xs font-mono font-medium text-terminal-muted uppercase tracking-wider mb-2 block">
-          Max Logs in Memory
-        </label>
-        <div className="flex items-center gap-4">
-          <input
-            type="range"
-            min="1000"
-            max="50000"
-            step="1000"
-            value={settings.maxLogsInMemory}
-            onChange={(e) =>
-              handleSettingChange("maxLogsInMemory", parseInt(e.target.value))
-            }
-            className="flex-1 accent-terminal-accent"
-          />
-          <span className="font-mono text-sm text-terminal-fg w-20 text-right">
-            {settings.maxLogsInMemory.toLocaleString()}
-          </span>
-        </div>
-      </div>
-
-      <div className="space-y-3 pt-4 border-t border-terminal-border">
-        <Checkbox
-          variant="bracket"
-          checked={settings.autoCleanup}
-          onChange={(e) => handleSettingChange("autoCleanup", e.target.checked)}
-          label={
-            <span className="font-mono text-sm text-text-primary">
-              Automatically clean up old logs
-            </span>
-          }
-        />
-        {settings.autoCleanup && (
-          <div className="ml-6 mt-2">
-            <label className="text-xs font-mono text-terminal-muted mb-1 block">
-              Cleanup Interval (seconds)
-            </label>
-            <input
-              type="number"
-              value={settings.cleanupInterval}
-              onChange={(e) =>
-                handleSettingChange("cleanupInterval", parseInt(e.target.value))
-              }
-              className="w-32 h-8 px-3 border border-terminal-fg/30 bg-terminal-input text-terminal-fg font-mono text-sm focus:border-terminal-fg focus:outline-none"
-            />
-          </div>
-        )}
-        <Checkbox
-          variant="bracket"
-          checked={settings.persistFilters}
-          onChange={(e) =>
-            handleSettingChange("persistFilters", e.target.checked)
-          }
-          label={
-            <span className="font-mono text-sm text-text-primary">
-              Remember filters between sessions
-            </span>
-          }
-        />
-      </div>
-    </div>
-  );
-
-  const renderNotificationSettings = () => (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <Checkbox
-          variant="bracket"
-          checked={settings.enableNotifications}
-          onChange={(e) =>
-            handleSettingChange("enableNotifications", e.target.checked)
-          }
-          label={
-            <span className="font-mono text-sm text-text-primary">
-              Enable desktop notifications
-            </span>
-          }
-        />
-        {settings.enableNotifications && (
-          <>
-            <div className="ml-6 mt-2 space-y-2">
-              <Checkbox
-                variant="bracket"
-                checked={settings.notifyOnError}
-                onChange={(e) =>
-                  handleSettingChange("notifyOnError", e.target.checked)
-                }
-                label={
-                  <span className="font-mono text-sm text-text-primary">
-                    Notify on ERROR level logs
-                  </span>
-                }
-              />
-              <Checkbox
-                variant="bracket"
-                checked={settings.notifyOnFatal}
-                onChange={(e) =>
-                  handleSettingChange("notifyOnFatal", e.target.checked)
-                }
-                label={
-                  <span className="font-mono text-sm text-text-primary">
-                    Notify on FATAL level logs
-                  </span>
-                }
-              />
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="p-4 border border-terminal-border bg-terminal-input/30">
-        <div className="flex items-center gap-2 text-terminal-muted text-xs font-mono">
-          <span className="text-log-warn">⚠</span>
-          <span>
-            Browser notification permission must be granted for this feature to
-            work.
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderShortcutSettings = () => (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        {Object.entries(settings.shortcuts).map(([action, shortcut]) => (
-          <div
-            key={action}
-            className="flex items-center justify-between p-3 border border-terminal-border bg-terminal-input/30"
-          >
-            <span className="font-mono text-sm text-text-primary capitalize">
-              {action}
-            </span>
-            <kbd className="px-2 py-1 bg-terminal-border text-terminal-fg font-mono text-xs border border-terminal-fg/30">
-              {shortcut}
-            </kbd>
-          </div>
-        ))}
-      </div>
-
-      <div className="p-4 border border-terminal-border bg-terminal-input/30 mt-4">
-        <div className="text-terminal-muted text-xs font-mono space-y-1">
-          <p>Additional shortcuts:</p>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            <div className="flex justify-between">
-              <span>Scroll to bottom</span>
-              <kbd className="text-terminal-fg">End</kbd>
-            </div>
-            <div className="flex justify-between">
-              <span>Scroll to top</span>
-              <kbd className="text-terminal-fg">Home</kbd>
-            </div>
-            <div className="flex justify-between">
-              <span>Next log</span>
-              <kbd className="text-terminal-fg">↓</kbd>
-            </div>
-            <div className="flex justify-between">
-              <span>Previous log</span>
-              <kbd className="text-terminal-fg">↑</kbd>
-            </div>
-            <div className="flex justify-between">
-              <span>Copy selected</span>
-              <kbd className="text-terminal-fg">Ctrl+C</kbd>
-            </div>
-            <div className="flex justify-between">
-              <span>Select all</span>
-              <kbd className="text-terminal-fg">Ctrl+A</kbd>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderAboutSettings = () => (
-    <div className="space-y-6">
-      <div className="text-center py-8">
-        <div className="inline-flex items-center justify-center w-16 h-16 border-2 border-terminal-fg mb-4">
-          <span className="text-2xl font-mono text-terminal-fg">S</span>
-        </div>
-        <h2 className="text-xl font-mono text-terminal-fg mb-2">SENTINEL</h2>
-        <p className="text-terminal-muted font-mono text-sm">
-          Terminal-style log monitoring and analysis platform
-        </p>
-      </div>
-
-      <div className="border border-terminal-border divide-y divide-terminal-border">
-        <div className="flex justify-between p-3">
-          <span className="font-mono text-sm text-terminal-muted">Version</span>
-          <span className="font-mono text-sm text-terminal-fg">v1.0.0</span>
-        </div>
-        <div className="flex justify-between p-3">
-          <span className="font-mono text-sm text-terminal-muted">Build</span>
-          <span className="font-mono text-sm text-terminal-fg">2026.01.29</span>
-        </div>
-        <div className="flex justify-between p-3">
-          <span className="font-mono text-sm text-terminal-muted">License</span>
-          <span className="font-mono text-sm text-terminal-fg">MIT</span>
-        </div>
-        <div className="flex justify-between p-3">
-          <span className="font-mono text-sm text-terminal-muted">Author</span>
-          <span className="font-mono text-sm text-terminal-fg">
-            Sentinel Team
-          </span>
-        </div>
-      </div>
-
-      <div className="flex justify-center gap-4">
-        <Button variant="outline" size="sm">
-          View Documentation
-        </Button>
-        <Button variant="outline" size="sm">
-          Report Issue
-        </Button>
-        <Button variant="outline" size="sm">
-          Check Updates
-        </Button>
-      </div>
-    </div>
-  );
-
-  const renderContent = () => {
-    switch (activeSection) {
-      case "display":
-        return renderDisplaySettings();
-      case "connection":
-        return renderConnectionSettings();
-      case "data":
-        return renderDataSettings();
-      case "notifications":
-        return renderNotificationSettings();
-      case "shortcuts":
-        return renderShortcutSettings();
-      case "about":
-        return renderAboutSettings();
-      default:
-        return renderDisplaySettings();
-    }
-  };
-
-  return (
-    <div className="h-screen flex flex-col bg-terminal-bg">
-      <Header
-        title="Sentinel"
-        subtitle="Configure application settings"
-        status={{
-          connected: true,
-          logsPerSecond: 0,
-          totalLogs: 0,
-        }}
+  const renderDisplay = () => (
+    <div className="space-y-5">
+      <SectionTitle
+        title="Display"
+        description="How events and timestamps are rendered across the app."
       />
 
-      <div className="border-b border-terminal-border bg-terminal-secondary px-6">
-        <Navigation items={navigationItems} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Select
+          label="Theme"
+          options={THEME_OPTIONS}
+          value={draft.theme}
+          onChange={(value) => handleTheme(value as ThemeSetting)}
+        />
+        <Select
+          label="Timestamp format"
+          options={TIMESTAMP_OPTIONS}
+          value={draft.timestampFormat}
+          onChange={(value) =>
+            update("timestampFormat", value as TimestampFormatSetting)
+          }
+        />
+        <Select
+          label="Event text size"
+          options={FONT_SIZE_OPTIONS}
+          value={draft.fontSize}
+          onChange={(value) => update("fontSize", value as FontSizeSetting)}
+        />
+        <Select
+          label="Line height"
+          options={LINE_HEIGHT_OPTIONS}
+          value={draft.lineHeight}
+          onChange={(value) =>
+            update("lineHeight", value as LineHeightSetting)
+          }
+        />
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="w-64 border-r border-terminal-border bg-terminal-secondary flex flex-col">
-          <div className="p-4 border-b border-terminal-border bg-terminal-input/50">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 bg-terminal-accent rounded-full animate-pulse" />
-              <span className="font-mono text-sm text-terminal-accent uppercase tracking-wider">
-                CONFIG
-              </span>
-            </div>
-          </div>
+      <div className="flex flex-col items-start gap-2.5 border-t border-line pt-4">
+        <Checkbox
+          checked={draft.showMilliseconds}
+          onChange={(event) =>
+            update("showMilliseconds", event.target.checked)
+          }
+          label="Show milliseconds in timestamps"
+        />
+        <Checkbox
+          checked={draft.colorizeLevels}
+          onChange={(event) => update("colorizeLevels", event.target.checked)}
+          label="Colorize severity labels"
+        />
+      </div>
+    </div>
+  );
 
-          <div className="flex-1 overflow-y-auto py-2">
-            {sections.map((section) => (
-              <button
-                key={section.id}
-                onClick={() => setActiveSection(section.id)}
-                className={cn(
-                  "w-full px-4 py-3 text-left font-mono text-sm transition-all duration-150 flex items-center gap-3",
-                  activeSection === section.id
-                    ? "bg-terminal-input text-terminal-fg border-l-2 border-l-terminal-accent"
-                    : "text-text-secondary hover:bg-terminal-input/50 hover:text-text-primary border-l-2 border-l-transparent",
-                )}
-              >
-                <span
+  const renderConnection = () => (
+    <div className="space-y-5">
+      <SectionTitle
+        title="Connection"
+        description="Where the viewer reads logs from. This browser connects directly to the API."
+      />
+
+      <Field
+        label="API base URL"
+        help="Applies after a reload. The live stream uses the same base URL."
+      >
+        <Input
+          value={draft.apiEndpoint}
+          onChange={(event) => update("apiEndpoint", event.target.value)}
+          spellCheck={false}
+          placeholder="http://localhost:8000/api"
+        />
+      </Field>
+
+      <div className="grid gap-4 border-t border-line pt-4 sm:grid-cols-2">
+        <NumberInput
+          label="Reconnect interval"
+          help="Applies on the next connection."
+          value={draft.reconnectInterval}
+          min={500}
+          max={60000}
+          step={500}
+          suffix="ms"
+          onChange={(value) => update("reconnectInterval", value)}
+        />
+        <NumberInput
+          label="Max reconnect attempts"
+          help="Stops retrying after this many failures."
+          value={draft.maxReconnectAttempts}
+          min={1}
+          max={50}
+          onChange={(value) => update("maxReconnectAttempts", value)}
+        />
+      </div>
+    </div>
+  );
+
+  const renderData = () => (
+    <div className="space-y-5">
+      <SectionTitle
+        title="Data"
+        description="What this browser keeps in memory while you watch the live feed."
+      />
+
+      <Field
+        label="Events kept in memory"
+        help="The live buffer is capped at this count. Older events scroll out automatically."
+      >
+        <div className="flex items-center gap-3">
+          <input
+            type="range"
+            min={500}
+            max={10000}
+            step={500}
+            value={draft.maxLogsInMemory}
+            onChange={(event) =>
+              update("maxLogsInMemory", Number(event.target.value))
+            }
+            className="h-4 w-full max-w-[420px] cursor-pointer accent-ink"
+          />
+          <span className="w-16 text-right font-mono text-[11.5px] text-ink tabular-nums">
+            {draft.maxLogsInMemory.toLocaleString()}
+          </span>
+        </div>
+      </Field>
+
+      <div className="border-t border-line pt-4">
+        <Checkbox
+          checked={draft.persistFilters}
+          onChange={(event) => update("persistFilters", event.target.checked)}
+          label="Remember live-feed filters between sessions"
+        />
+        <p className="mt-2 pl-[22px] text-[11px] leading-[1.4] text-muted">
+          Search text, levels, sources, and the time window are restored the
+          next time you open the live feed.
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderAbout = () => (
+    <div className="space-y-5">
+      <SectionTitle
+        title="About"
+        description="Sentinel aggregates application logs and flags anomalies worth a look."
+      />
+
+      <dl className="divide-y divide-line border-y border-line">
+        {[
+          ["Version", `v${APP_VERSION}`],
+          ["Runtime", "Next.js 16"],
+          ["License", "Private"],
+        ].map(([label, value]) => (
+          <div
+            key={label}
+            className="flex items-center justify-between py-2.5 text-[11.5px]"
+          >
+            <dt className="text-muted">{label}</dt>
+            <dd className="font-mono text-ink tabular-nums">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <p className="text-[11px] leading-[1.5] text-muted">
+        Settings are stored in this browser only. Nothing is sent to a server.
+      </p>
+    </div>
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHead title="Settings" subtitle="Preferences for this browser" />
+
+      <div className="flex min-h-0 flex-1">
+        <aside className="w-[180px] shrink-0 overflow-y-auto border-r border-line px-2 py-3">
+          <nav aria-label="Settings sections" className="space-y-0.5">
+            {SECTIONS.map((item) => {
+              const active = item.id === section;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setSection(item.id)}
                   className={cn(
-                    "w-5 text-center",
-                    activeSection === section.id
-                      ? "text-terminal-accent"
-                      : "text-terminal-muted",
+                    "flex h-7 w-full cursor-pointer items-center rounded-[5px] px-2 text-left text-[12px] transition-colors duration-150",
+                    active
+                      ? "bg-selected font-[550] text-ink"
+                      : "text-muted hover:bg-hover hover:text-ink",
                   )}
                 >
-                  {section.icon}
-                </span>
-                <span>{section.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="p-4 border-t border-terminal-border bg-terminal-input/30">
-            <div className="flex items-center justify-between text-[10px] font-mono text-terminal-muted">
-              <span>STATUS:</span>
-              <span
-                className={cn(
-                  "flex items-center gap-1",
-                  hasChanges ? "text-log-warn" : "text-terminal-accent",
-                )}
-              >
-                <span
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full",
-                    hasChanges ? "bg-log-warn" : "bg-terminal-accent",
-                    hasChanges && "animate-pulse",
-                  )}
-                />
-                {hasChanges ? "MODIFIED" : "SAVED"}
-              </span>
-            </div>
-          </div>
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
         </aside>
 
-        <div className="flex-1 p-6 overflow-y-auto">
-          <Card variant="terminal" className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-terminal-fg/20 bg-terminal-input">
-              <div className="flex items-center gap-3">
-                <div className="flex gap-1.5">
-                  <div className="w-2.5 h-2.5 bg-log-error" />
-                  <div className="w-2.5 h-2.5 bg-log-warn" />
-                  <div className="w-2.5 h-2.5 bg-terminal-accent" />
-                </div>
-                <span className="text-terminal-fg font-mono text-xs tracking-wide">
-                  sentinel@config:~$ ./configure --{activeSection}
-                </span>
-              </div>
-              {hasChanges && (
-                <Badge variant="secondary" size="sm">
-                  unsaved changes
-                </Badge>
-              )}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="max-w-[720px] px-5 py-4">
+              {section === "display" ? renderDisplay() : null}
+              {section === "connection" ? renderConnection() : null}
+              {section === "data" ? renderData() : null}
+              {section === "about" ? renderAbout() : null}
             </div>
+          </div>
 
-            <div className="p-6">
-              <h2 className="text-lg font-mono text-terminal-fg mb-6 uppercase tracking-wider flex items-center gap-2">
-                <span className="text-terminal-accent">[</span>
-                {sections.find((s) => s.id === activeSection)?.label}
-                <span className="text-terminal-accent">]</span>
-              </h2>
-              {renderContent()}
+          <div className="flex shrink-0 items-center gap-3 border-t border-line bg-canvas px-5 py-2.5">
+            <span
+              className="flex items-center gap-2 text-[11px] text-muted"
+              aria-live="polite"
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  hasChanges ? "bg-warn" : "bg-ok",
+                )}
+              />
+              {hasChanges ? "Unsaved changes" : justSaved ? "Saved" : "No changes"}
+            </span>
+
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={handleReset}
+                title={
+                  resetArmed
+                    ? "Click again to reset every setting"
+                    : "Reset all settings to defaults"
+                }
+              >
+                {resetArmed ? "Confirm reset" : "Reset"}
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleSave}
+                disabled={!hasChanges}
+              >
+                Save changes
+              </Button>
             </div>
-
-            <div className="flex items-center justify-between px-6 py-4 border-t border-terminal-fg/20 bg-terminal-input">
-              <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    "font-mono text-xs uppercase tracking-wider",
-                    saveStatus === "saved"
-                      ? "text-terminal-accent"
-                      : "text-terminal-muted",
-                  )}
-                >
-                  {saveStatus === "saving"
-                    ? "◉ SAVING..."
-                    : saveStatus === "saved"
-                      ? "● SAVED"
-                      : "● CONFIG MODE"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleReset}
-                  disabled={saveStatus === "saving"}
-                >
-                  RESET
-                </Button>
-                <Button
-                  variant="terminal"
-                  size="sm"
-                  onClick={handleSave}
-                  disabled={!hasChanges || saveStatus === "saving"}
-                  glow={hasChanges}
-                >
-                  {saveStatus === "saving" ? "SAVING..." : "SAVE CHANGES"}
-                </Button>
-              </div>
-            </div>
-          </Card>
+          </div>
         </div>
       </div>
     </div>
