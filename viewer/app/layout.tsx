@@ -1,17 +1,29 @@
 import type { Metadata } from "next";
-import { Fira_Code } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ReactNode } from "react";
 import { QueryProvider } from "@/providers/QueryProvider";
+import { AppShell } from "@/components/layout/AppShell";
+import { THEME_SCRIPT } from "@/lib/theme";
+import { settingsBootstrap } from "@/lib/settings";
+import { SettingsProvider } from "@/providers/SettingsProvider";
 
-const firaCode = Fira_Code({
+const inter = Inter({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-jetbrains",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "Sentinel",
-  description: "Terminal-style log monitoring and analysis platform",
+  description: "Log monitoring with AI-assisted analysis",
 };
 
 export default function RootLayout({
@@ -20,11 +32,19 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en" className="bg-terminal-bg text-text-primary">
+    <html lang="en" data-theme="light" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: settingsBootstrap() }} />
+      </head>
       <body
-        className={`${firaCode.className} antialiased min-h-screen bg-terminal-bg`}
+        className={`${inter.variable} ${jetbrainsMono.variable} min-h-screen bg-canvas font-sans text-ink antialiased`}
       >
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <SettingsProvider>
+            <AppShell>{children}</AppShell>
+          </SettingsProvider>
+        </QueryProvider>
       </body>
     </html>
   );
