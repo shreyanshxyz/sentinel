@@ -1,189 +1,108 @@
 "use client";
 
-import React from "react";
-import { Badge } from "../../ui/Badge";
-import { Card, CardHeader, CardTitle } from "../../ui/Card";
+import { useMemo } from "react";
+import type { ReactNode } from "react";
+import { LevelLabel } from "@/components/ui/LevelLabel";
+import { useSettings } from "@/providers/SettingsProvider";
+import { formatTimestamp } from "@/lib/format";
 import { LogEntry } from "@/types/log";
-import { cn } from "../../../lib/utils";
 
 export interface LogMetadataPanelProps {
   log: LogEntry;
   className?: string;
 }
 
-export const LogMetadataPanel: React.FC<LogMetadataPanelProps> = ({
-  log,
-  className,
-}) => {
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return {
-      iso: date.toISOString(),
-      local: date.toLocaleString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        fractionalSecondDigits: 3,
-        hour12: false,
-      }),
-      relative: getRelativeTime(date),
-    };
-  };
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="text-[10px] font-semibold tracking-[.08em] text-faint uppercase">
+      {children}
+    </h2>
+  );
+}
 
-  const getRelativeTime = (date: Date): string => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return `${seconds}s ago`;
-  };
+export function LogMetadataPanel({ log, className }: LogMetadataPanelProps) {
+  const settings = useSettings();
 
-  const timeInfo = formatTimestamp(log.timestamp);
+  const attributes = useMemo(() => {
+    const rows: Array<{ key: string; value: string }> = [];
+
+    for (const [key, value] of Object.entries(log.labels ?? {})) {
+      rows.push({ key, value: String(value) });
+    }
+
+    for (const [key, value] of Object.entries(log.metadata ?? {})) {
+      if (value === undefined || value === null) continue;
+      rows.push({ key: humanizeKey(key), value: String(value) });
+    }
+
+    return rows;
+  }, [log]);
 
   return (
-    <Card
-      variant="bordered"
-      padding="md"
-      className={cn("space-y-4", className)}
-    >
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2">
-          <span className="text-terminal-accent">[</span>
-          <span>METADATA</span>
-          <span className="text-terminal-accent">]</span>
-        </CardTitle>
-      </CardHeader>
+    <div className={className}>
+      <section className="border-b border-line px-5 py-4">
+        <SectionLabel>Event</SectionLabel>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-          <span className="text-terminal-accent">[</span>
-          <span>Timestamp</span>
-          <span className="text-terminal-accent">]</span>
-        </div>
-        <div className="space-y-1 pl-3 border-l border-terminal-border/50">
-          <div className="flex items-center gap-2">
-            <span className="text-terminal-muted text-xs w-16">ISO:</span>
-            <code className="text-sm text-text-primary font-mono">
-              {timeInfo.iso}
-            </code>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-terminal-muted text-xs w-16">Local:</span>
-            <code className="text-sm text-text-primary font-mono">
-              {timeInfo.local}
-            </code>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-terminal-muted text-xs w-16">Relative:</span>
-            <span className="text-sm text-terminal-accent font-mono">
-              {timeInfo.relative}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-            <span className="text-terminal-accent">[</span>
-            <span>Level</span>
-            <span className="text-terminal-accent">]</span>
-          </div>
-          <div className="pl-3 border-l border-terminal-border/50">
-            <Badge variant="log-level" level={log.level} size="md">
-              {log.level}
-            </Badge>
-          </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <LevelLabel level={log.level} />
+          <span
+            title={formatTimestamp(log.timestamp, "iso", true)}
+            className="font-mono text-[11px] text-muted tabular-nums"
+          >
+            {formatTimestamp(
+              log.timestamp,
+              settings.timestampFormat,
+              settings.showMilliseconds,
+            )}
+          </span>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-            <span className="text-terminal-accent">[</span>
-            <span>Source</span>
-            <span className="text-terminal-accent">]</span>
-          </div>
-          <div className="pl-3 border-l border-terminal-border/50">
-            <code className="text-sm text-log-info font-mono">
-              {log.source}
-            </code>
-          </div>
-        </div>
-      </div>
+        <p className="mt-2 max-w-[880px] font-mono text-[12.5px] leading-[1.55] break-words whitespace-pre-wrap text-ink">
+          {log.message}
+        </p>
 
-      {Object.keys(log.labels).length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-            <span className="text-terminal-accent">[</span>
-            <span>Labels</span>
-            <span className="text-terminal-accent">]</span>
-          </div>
-          <div className="pl-3 border-l border-terminal-border/50 space-y-1">
-            {Object.entries(log.labels).map(([key, value]) => (
-              <div key={key} className="flex items-center gap-2">
-                <span className="text-terminal-muted text-xs font-mono w-24">
-                  {key}:
-                </span>
-                <span className="text-sm text-text-primary font-mono bg-terminal-input px-2 py-0.5 border border-terminal-border">
-                  {String(value)}
-                </span>
+        <div className="mt-3 flex items-baseline gap-3">
+          <span className="text-[10px] font-semibold tracking-[.06em] text-faint uppercase">
+            Source
+          </span>
+          <span className="font-mono text-[11.5px] text-ink-2">
+            {log.source}
+          </span>
+        </div>
+      </section>
+
+      <section className="border-b border-line px-5 py-4">
+        <SectionLabel>Attributes</SectionLabel>
+
+        {attributes.length === 0 ? (
+          <p className="mt-2 text-[11.5px] text-muted">
+            This event has no labels or system metadata.
+          </p>
+        ) : (
+          <dl className="mt-1">
+            {attributes.map((row) => (
+              <div
+                key={row.key}
+                className="grid grid-cols-[minmax(96px,180px)_minmax(0,1fr)] items-baseline gap-4 border-b border-line py-1.5 last:border-b-0"
+              >
+                <dt className="truncate font-mono text-[10.5px] text-faint">
+                  {row.key}
+                </dt>
+                <dd className="font-mono text-[11.5px] break-words text-ink-2">
+                  {row.value}
+                </dd>
               </div>
             ))}
-          </div>
-        </div>
-      )}
-
-      {log.metadata && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted uppercase tracking-wider">
-            <span className="text-terminal-accent">[</span>
-            <span>System Metadata</span>
-            <span className="text-terminal-accent">]</span>
-          </div>
-          <div className="grid grid-cols-3 gap-3 pl-3 border-l border-terminal-border/50">
-            {log.metadata.threadId !== undefined && (
-              <div>
-                <div className="text-terminal-muted text-[10px] font-mono uppercase mb-1">
-                  Thread ID
-                </div>
-                <code className="text-sm text-text-primary font-mono">
-                  {log.metadata.threadId}
-                </code>
-              </div>
-            )}
-            {log.metadata.pid !== undefined && (
-              <div>
-                <div className="text-terminal-muted text-[10px] font-mono uppercase mb-1">
-                  PID
-                </div>
-                <code className="text-sm text-text-primary font-mono">
-                  {log.metadata.pid}
-                </code>
-              </div>
-            )}
-            {log.metadata.serverId !== undefined && (
-              <div>
-                <div className="text-terminal-muted text-[10px] font-mono uppercase mb-1">
-                  Server ID
-                </div>
-                <code className="text-sm text-text-primary font-mono">
-                  {log.metadata.serverId}
-                </code>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </Card>
+          </dl>
+        )}
+      </section>
+    </div>
   );
-};
+}
 
 export default LogMetadataPanel;
