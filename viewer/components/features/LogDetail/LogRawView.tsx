@@ -1,109 +1,87 @@
 "use client";
 
-import React, { useState } from "react";
-import { Button } from "../../ui/Button";
-import { Card, CardHeader, CardTitle } from "../../ui/Card";
+import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { CopyIcon } from "@/components/ui/icons";
 import { LogEntry } from "@/types/log";
-import { cn } from "../../../lib/utils";
 
 export interface LogRawViewProps {
   log: LogEntry;
   className?: string;
 }
 
-export const LogRawView: React.FC<LogRawViewProps> = ({ log, className }) => {
+export function LogRawView({ log, className }: LogRawViewProps) {
   const [copied, setCopied] = useState(false);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
-
-  const handleCopy = async () => {
-    const textToCopy = log.raw || JSON.stringify(log, null, 2);
-    await navigator.clipboard.writeText(textToCopy);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const getLogLevelColor = (level: string) => {
-    const colors: Record<string, string> = {
-      DEBUG: "text-log-debug",
-      INFO: "text-log-info",
-      WARN: "text-log-warn",
-      ERROR: "text-log-error",
-      FATAL: "text-log-fatal",
-    };
-    return colors[level] || "text-text-primary";
-  };
 
   const rawContent = log.raw || JSON.stringify(log, null, 2);
   const lines = rawContent.split("\n");
 
-  return (
-    <Card
-      variant="terminal"
-      padding="none"
-      className={cn("flex flex-col", className)}
-    >
-      <CardHeader className="flex items-center justify-between px-4 py-3 border-b border-terminal-fg/20 bg-terminal-input">
-        <CardTitle className="flex items-center gap-2">
-          <span className="text-terminal-accent">[</span>
-          <span>RAW LOG</span>
-          <span className="text-terminal-accent">]</span>
-        </CardTitle>
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(rawContent);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  };
 
-        <div className="flex items-center gap-2">
+  return (
+    <section className={className}>
+      <div className="flex items-center justify-between gap-4 px-5 py-4 pb-2">
+        <h2 className="text-[10px] font-semibold tracking-[.08em] text-faint uppercase">
+          Raw
+        </h2>
+
+        <div className="flex items-center gap-1.5">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowLineNumbers(!showLineNumbers)}
+            onClick={() => setShowLineNumbers((value) => !value)}
+            aria-pressed={showLineNumbers}
           >
-            <span className="text-terminal-muted">[</span>
-            <span>{showLineNumbers ? "HIDE LINES" : "SHOW LINES"}</span>
-            <span className="text-terminal-muted">]</span>
+            {showLineNumbers ? "Hide line numbers" : "Show line numbers"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopy}>
-            <span className="text-terminal-muted">[</span>
-            <span>{copied ? "COPIED!" : "COPY"}</span>
-            <span className="text-terminal-muted">]</span>
+          <Button variant="secondary" size="sm" onClick={handleCopy}>
+            <CopyIcon className="h-3 w-3" />
+            {copied ? "Copied" : "Copy"}
           </Button>
         </div>
-      </CardHeader>
+      </div>
 
-      <div className="flex-1 overflow-auto bg-black p-4 font-mono text-sm">
-        <pre className="whitespace-pre-wrap break-all">
-          {lines.map((line, index) => (
-            <div
-              key={index}
-              className={cn(
-                "flex hover:bg-terminal-input/50 transition-colors",
-                getLogLevelColor(log.level),
-              )}
-            >
-              {showLineNumbers && (
-                <span className="text-terminal-muted select-none pr-4 text-xs border-r border-terminal-border/30 w-12 text-right">
-                  {index + 1}
+      <div className="px-5">
+        <div className="max-h-[420px] overflow-auto rounded-[5px] border border-line bg-sunken py-2.5">
+          <pre className="font-mono text-[11px] leading-[1.6]">
+            {lines.map((line, index) => (
+              <div
+                key={index}
+                className="flex px-2 transition-colors duration-100 hover:bg-hover"
+              >
+                {showLineNumbers ? (
+                  <span className="w-9 shrink-0 border-r border-line pr-2.5 text-right text-[10px] text-faint tabular-nums select-none">
+                    {index + 1}
+                  </span>
+                ) : null}
+                <span className="min-w-0 flex-1 whitespace-pre-wrap break-all pl-3 text-ink-2">
+                  {line || " "}
                 </span>
-              )}
-              <span className="flex-1">{line}</span>
-            </div>
-          ))}
-        </pre>
-      </div>
+              </div>
+            ))}
+          </pre>
+        </div>
 
-      <div className="px-4 py-2 border-t border-terminal-fg/20 bg-terminal-input flex items-center justify-between text-xs font-mono">
-        <div className="flex items-center gap-4">
-          <span className="text-terminal-muted">
-            Lines: <span className="text-text-primary">{lines.length}</span>
+        <div className="flex items-center gap-4 py-2 text-[10.5px] text-faint">
+          <span className="tabular-nums">
+            {lines.length.toLocaleString()} lines
           </span>
-          <span className="text-terminal-muted">
-            Chars:{" "}
-            <span className="text-text-primary">{rawContent.length}</span>
+          <span aria-hidden className="h-3 w-px bg-line" />
+          <span className="tabular-nums">
+            {rawContent.length.toLocaleString()} chars
           </span>
-        </div>
-        <div className="text-terminal-muted">
-          Format: <span className="text-terminal-accent">RAW</span>
+          <span className="ml-auto font-mono uppercase">
+            {log.raw ? "Raw text" : "JSON"}
+          </span>
         </div>
       </div>
-    </Card>
+    </section>
   );
-};
+}
 
 export default LogRawView;
