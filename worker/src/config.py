@@ -43,8 +43,8 @@ class Config(BaseSettings):
         description="Groq API key for LLM inference (alternative to Ollama)",
     )
     groq_model: str = Field(
-        default="llama-3.1-70b-versatile",
-        description="Groq model to use for analysis",
+        default="openai/gpt-oss-20b",
+        description="Groq model to use for analysis. Free-plan default.",
     )
     use_groq: bool = Field(
         default=True,
