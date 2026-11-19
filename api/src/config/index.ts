@@ -31,10 +31,16 @@ export interface DatabaseConfig {
   compressionDays: number;
 }
 
+export interface DemoConfig {
+  seed: boolean;
+  seedIntervalMs: number;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   log: LogConfig;
   database: DatabaseConfig;
+  demo: DemoConfig;
   version: string;
 }
 
@@ -86,6 +92,10 @@ export const appConfig: AppConfig = {
     ssl: getEnvBoolean("DATABASE_SSL", false),
     retentionDays: getEnvNumber("LOG_RETENTION_DAYS", 30),
     compressionDays: getEnvNumber("LOG_COMPRESSION_DAYS", 7),
+  },
+  demo: {
+    seed: getEnvBoolean("DEMO_SEED", false),
+    seedIntervalMs: getEnvNumber("DEMO_SEED_INTERVAL_MS", 60000),
   },
   version: getEnv("APP_VERSION", "1.0.0"),
 };
