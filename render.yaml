@@ -14,3 +14,5 @@ services:
         value: 8000
       - key: CORS_ORIGINS
         value: https://sentinel-one-beta.vercel.app
+      - key: DEMO_SEED
+        value: "true"
