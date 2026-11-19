@@ -41,6 +41,12 @@ Thumbs.db
 *.swp
 *~
 
+# Local process runner (project-run.sh)
+.run/
+
+# Local agent/tool state
+.superpowers/
+
 # Environment variables
 .env
 .env.local
@@ -56,6 +62,10 @@ secrets.json
 docs/
 
 node_modules/
+
+# Python virtual environments
+.venv/
+venv/
 
 __pycache__/
 *.py[cod]
